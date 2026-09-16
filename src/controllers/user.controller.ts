@@ -39,7 +39,7 @@ export const getProfile = async (req: Request, res: Response): Promise<void> => 
 export const updateProfile = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.user?.id;
-    const { name, phone, company_name, avatar_url, current_password, new_password } = req.body;
+    const { name, phone, company_name, avatar_url, current_password, new_password } = req.body || {};
 
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) {

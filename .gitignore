@@ -21,3 +21,6 @@ yarn-error.log*
 skills-lock.json
 .claude/
 .windsurf/
+
+# Documentation & Contracts
+docs/

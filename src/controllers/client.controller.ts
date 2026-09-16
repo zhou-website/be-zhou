@@ -208,7 +208,7 @@ export const getChatbotTree = async (_req: Request, res: Response): Promise<void
 export const escalateChatbot = async (req: Request, res: Response): Promise<void> => {
   try {
     const clientId = req.user?.id;
-    const { category, answered_node, last_message, service_id, title } = req.body;
+    const { category, answered_node, last_message, service_id, title } = req.body || {};
 
     if (!clientId) {
       sendError(res, 401, 'Otorisasi gagal');

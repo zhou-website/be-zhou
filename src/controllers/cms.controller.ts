@@ -16,7 +16,7 @@ export const getCompanyProfiles = async (_req: Request, res: Response): Promise<
 
 export const updateCompanyProfile = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { section_key, title, content } = req.body;
+    const { section_key, title, content } = req.body || {};
     const adminId = req.user?.id;
 
     const profile = await prisma.companyProfile.upsert({
@@ -46,7 +46,7 @@ export const getServices = async (_req: Request, res: Response): Promise<void> =
 
 export const createService = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { service_code, service_name, category, description } = req.body;
+    const { service_code, service_name, category, description } = req.body || {};
     const newService = await prisma.service.create({
       data: { service_code, service_name, category, description },
     });
@@ -79,7 +79,7 @@ export const getTaxRates = async (_req: Request, res: Response): Promise<void> =
 
 export const createTaxRate = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { currency_code, rate_value, effective_start_date, effective_end_date } = req.body;
+    const { currency_code, rate_value, effective_start_date, effective_end_date } = req.body || {};
 
     const rate = await prisma.taxRate.create({
       data: {
@@ -111,7 +111,7 @@ export const getRegulations = async (_req: Request, res: Response): Promise<void
 
 export const createRegulation = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { title, regulation_type, file_path, file_size } = req.body;
+    const { title, regulation_type, file_path, file_size } = req.body || {};
     const adminId = req.user?.id;
 
     const reg = await prisma.regulation.create({
@@ -144,7 +144,7 @@ export const getEducation = async (_req: Request, res: Response): Promise<void> 
 
 export const createEducation = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { title, category, content_type, body, file_path } = req.body;
+    const { title, category, content_type, body, file_path } = req.body || {};
     const adminId = req.user?.id;
 
     const item = await prisma.educationContent.create({
@@ -179,7 +179,7 @@ export const getCareers = async (_req: Request, res: Response): Promise<void> =>
 
 export const createCareer = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { position_code, position_title, level, location, description } = req.body;
+    const { position_code, position_title, level, location, description } = req.body || {};
     const job = await prisma.careerJob.create({
       data: { position_code, position_title, level, location, description },
     });
@@ -192,7 +192,7 @@ export const createCareer = async (req: Request, res: Response): Promise<void> =
 export const applyCareer = async (req: Request, res: Response): Promise<void> => {
   try {
     const jobId = parseInt(String(req.params.id), 10);
-    const { applicant_name, applicant_email, applicant_phone, cv_file_path } = req.body;
+    const { applicant_name, applicant_email, applicant_phone, cv_file_path } = req.body || {};
 
     if (!applicant_name || !applicant_email || !cv_file_path) {
       sendError(res, 400, 'Data biodata dan file CV (PDF) wajib diisi');
@@ -252,7 +252,7 @@ export const getContactSettings = async (_req: Request, res: Response): Promise<
 
 export const submitContactMessage = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, email, message } = req.body;
+    const { name, email, message } = req.body || {};
     if (!name || !email || !message) {
       sendError(res, 400, 'Nama, email, dan pesan wajib diisi');
       return;

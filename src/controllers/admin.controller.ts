@@ -67,7 +67,7 @@ export const getConsultations = async (req: Request, res: Response): Promise<voi
 
 export const createConsultation = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { client_id, service_id, title, description, initial_tasks } = req.body;
+    const { client_id, service_id, title, description, initial_tasks } = req.body || {};
 
     if (!client_id || !service_id || !title) {
       sendError(res, 400, 'Client, jenis layanan, dan judul konsultasi wajib diisi');
@@ -108,7 +108,7 @@ export const updateConsultationStatus = async (req: Request, res: Response): Pro
   try {
     const adminId = req.user?.id;
     const projectId = parseInt(String(req.params.id), 10);
-    const { status } = req.body;
+    const { status } = req.body || {};
 
     if (!status || !['IN_PROGRESS', 'COMPLETED'].includes(status)) {
       sendError(res, 400, 'Status baru tidak valid (pilih IN_PROGRESS atau COMPLETED)');
@@ -170,7 +170,7 @@ export const updateConsultationStatus = async (req: Request, res: Response): Pro
 export const addProjectTask = async (req: Request, res: Response): Promise<void> => {
   try {
     const projectId = parseInt(String(req.params.id), 10);
-    const { task_name } = req.body;
+    const { task_name } = req.body || {};
 
     if (!task_name) {
       sendError(res, 400, 'Nama tugas checklist wajib diisi');
@@ -194,7 +194,7 @@ export const addProjectTask = async (req: Request, res: Response): Promise<void>
 export const toggleProjectTask = async (req: Request, res: Response): Promise<void> => {
   try {
     const taskId = parseInt(String(req.params.taskId), 10);
-    const { is_completed } = req.body;
+    const { is_completed } = req.body || {};
 
     const task = await prisma.projectTask.update({
       where: { id: taskId },
@@ -213,11 +213,12 @@ export const uploadDocument = async (req: Request, res: Response): Promise<void>
   try {
     const adminId = req.user?.id;
     const projectId = parseInt(String(req.params.id), 10);
+    const body = req.body || {};
     
-    let fileName = req.body.file_name;
-    let filePath = req.body.file_path;
-    let fileSize = req.body.file_size || '0 KB';
-    let fileType = req.body.file_type || 'PDF';
+    let fileName = body.file_name;
+    let filePath = body.file_path;
+    let fileSize = body.file_size || '0 KB';
+    let fileType = body.file_type || 'PDF';
 
     // Jika diunggah langsung melalui form-data/multipart
     if (req.file) {

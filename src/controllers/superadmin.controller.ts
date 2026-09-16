@@ -32,7 +32,7 @@ export const getAdmins = async (_req: Request, res: Response): Promise<void> => 
 
 export const createAdmin = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, email, password, role, phone } = req.body;
+    const { name, email, password, role, phone } = req.body || {};
 
     if (!name || !email || !password) {
       sendError(res, 400, 'Nama lengkap, email, dan kata sandi awal wajib diisi');
