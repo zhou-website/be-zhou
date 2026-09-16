@@ -11,7 +11,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'zhou_consulting_jwt_secret_dev_key
 
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, email, password, phone, company_name } = req.body;
+    const { name, email, password, phone, company_name } = req.body || {};
 
     if (!name || !email || !password) {
       sendError(res, 400, 'Nama lengkap, email, dan kata sandi wajib diisi');
@@ -54,7 +54,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = req.body || {};
 
     if (!email || !password) {
       sendError(res, 400, 'Email dan kata sandi wajib diisi');
@@ -107,7 +107,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
 export const googleLogin = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { email, name } = req.body;
+    const { email, name } = req.body || {};
 
     if (!email) {
       sendError(res, 400, 'Data Google OAuth tidak lengkap');
@@ -156,7 +156,7 @@ export const googleLogin = async (req: Request, res: Response): Promise<void> =>
 
 export const forgotPassword = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { email } = req.body;
+    const { email } = req.body || {};
     if (!email) {
       sendError(res, 400, 'Email wajib disertakan');
       return;
@@ -190,7 +190,7 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
 
 export const resetPassword = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { token, new_password } = req.body;
+    const { token, new_password } = req.body || {};
     if (!token || !new_password) {
       sendError(res, 400, 'Token dan kata sandi baru wajib disertakan');
       return;

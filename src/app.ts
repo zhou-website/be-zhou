@@ -39,15 +39,21 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Favicon handler to serve valid icon and eliminate browser 404
+const FAVICON_BASE64 =
+  'data:image/x-icon;base64,AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
 const EMPTY_FAVICON = Buffer.from(
   'AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
   'base64'
 );
-app.get('/favicon.ico', (_req: Request, res: Response) => {
+
+const serveFavicon = (_req: Request, res: Response) => {
   res.setHeader('Content-Type', 'image/x-icon');
   res.setHeader('Cache-Control', 'public, max-age=86400');
   res.status(200).send(EMPTY_FAVICON);
-});
+};
+
+app.get('/favicon.ico', serveFavicon);
+app.get('/docs/favicon.ico', serveFavicon);
 
 // Health check endpoint
 app.get('/api/health', async (_req: Request, res: Response) => {
@@ -99,13 +105,63 @@ const openApiContent = {
     '/api/v1/auth/login': {
       post: {
         summary: 'Login pengguna (Klien, Admin, Superadmin)',
-        responses: { '200': { description: 'Token JWT dan profil berhasil dikembalikan' } },
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['email', 'password'],
+                properties: {
+                  email: {
+                    type: 'string',
+                    format: 'email',
+                    example: 'admin@zhouconsulting.com',
+                  },
+                  password: {
+                    type: 'string',
+                    format: 'password',
+                    example: 'password123',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': { description: 'Token JWT dan profil berhasil dikembalikan' },
+          '400': { description: 'Email atau kata sandi tidak diisi / tidak valid' },
+          '401': { description: 'Kredensial tidak valid' },
+          '403': { description: 'Akun dinonaktifkan' },
+        },
       },
     },
     '/api/v1/auth/register': {
       post: {
         summary: 'Registrasi korporasi klien baru',
-        responses: { '201': { description: 'Akun berhasil didaftarkan' } },
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['name', 'email', 'password'],
+                properties: {
+                  name: { type: 'string', example: 'PT Citra Sejahtera' },
+                  email: { type: 'string', format: 'email', example: 'klien@citrasejahtera.com' },
+                  password: { type: 'string', format: 'password', example: 'SecurePassword123!' },
+                  phone: { type: 'string', example: '+6281234567890' },
+                  company_name: { type: 'string', example: 'PT Citra Sejahtera' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '201': { description: 'Akun berhasil didaftarkan' },
+          '400': { description: 'Data pendaftaran tidak lengkap' },
+          '409': { description: 'Email telah terdaftar' },
+        },
       },
     },
     '/api/v1/client/dashboard/overview': {
@@ -127,5 +183,6 @@ app.use(
   '/docs',
   apiReference({
     content: openApiContent,
+    favicon: FAVICON_BASE64,
   } as any)
 );
