@@ -7,7 +7,11 @@ import { redis } from '../config/redis.js';
 import { sendSuccess, sendError } from '../utils/response.js';
 import { sendPasswordResetEmail } from '../services/email.service.js';
 
+import { OAuth2Client } from 'google-auth-library';
+
 const JWT_SECRET = process.env.JWT_SECRET || 'zhou_consulting_jwt_secret_dev_key_2026';
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const googleClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
 
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -107,10 +111,30 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
 export const googleLogin = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { email, name } = req.body || {};
+    let email = req.body?.email;
+    let name = req.body?.name;
+    const idToken = req.body?.id_token || req.body?.credential;
+
+    // Jika frontend mengirimkan ID token Google, verifikasi secara kriptografis
+    if (idToken && googleClient && GOOGLE_CLIENT_ID) {
+      try {
+        const ticket = await googleClient.verifyIdToken({
+          idToken,
+          audience: GOOGLE_CLIENT_ID,
+        });
+        const payload = ticket.getPayload();
+        if (payload?.email) {
+          email = payload.email;
+          name = payload.name || name || 'Google Client User';
+        }
+      } catch (verifyErr) {
+        sendError(res, 401, 'Token Google OAuth tidak valid atau telah kedaluwarsa');
+        return;
+      }
+    }
 
     if (!email) {
-      sendError(res, 400, 'Data Google OAuth tidak lengkap');
+      sendError(res, 400, 'Data Google OAuth tidak lengkap. Sediakan id_token atau email.');
       return;
     }
 

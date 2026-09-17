@@ -1,4 +1,7 @@
 import express, { Express, Request, Response } from 'express';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import cors from 'cors';
 import helmet from 'helmet';
 import { apiReference } from '@scalar/express-api-reference';
@@ -82,102 +85,22 @@ app.get('/api/health', async (_req: Request, res: Response) => {
 // Mount API v1 routes
 app.use('/api/v1', apiRateLimiter, apiRoutes);
 
-// Scalar API Reference documentation
-const openApiContent = {
-  openapi: '3.1.0',
-  info: {
-    title: 'Zhou Consulting Backend API',
-    version: '1.0.0',
-    description:
-      'RESTful API Backend Zhou Consulting (PRD v2 Revisi & Figma Design) mencakup Modul Auth/User, Portal Klien, Portal Admin/Operasional, CMS Publik, dan Superadmin Log Audit.',
-  },
-  paths: {
-    '/api/health': {
-      get: {
-        summary: 'Health check endpoint',
-        responses: {
-          '200': {
-            description: 'Server dan koneksi database/redis sehat',
-          },
-        },
-      },
-    },
-    '/api/v1/auth/login': {
-      post: {
-        summary: 'Login pengguna (Klien, Admin, Superadmin)',
-        requestBody: {
-          required: true,
-          content: {
-            'application/json': {
-              schema: {
-                type: 'object',
-                required: ['email', 'password'],
-                properties: {
-                  email: {
-                    type: 'string',
-                    format: 'email',
-                    example: 'admin@zhouconsulting.com',
-                  },
-                  password: {
-                    type: 'string',
-                    format: 'password',
-                    example: 'password123',
-                  },
-                },
-              },
-            },
-          },
-        },
-        responses: {
-          '200': { description: 'Token JWT dan profil berhasil dikembalikan' },
-          '400': { description: 'Email atau kata sandi tidak diisi / tidak valid' },
-          '401': { description: 'Kredensial tidak valid' },
-          '403': { description: 'Akun dinonaktifkan' },
-        },
-      },
-    },
-    '/api/v1/auth/register': {
-      post: {
-        summary: 'Registrasi korporasi klien baru',
-        requestBody: {
-          required: true,
-          content: {
-            'application/json': {
-              schema: {
-                type: 'object',
-                required: ['name', 'email', 'password'],
-                properties: {
-                  name: { type: 'string', example: 'PT Citra Sejahtera' },
-                  email: { type: 'string', format: 'email', example: 'klien@citrasejahtera.com' },
-                  password: { type: 'string', format: 'password', example: 'SecurePassword123!' },
-                  phone: { type: 'string', example: '+6281234567890' },
-                  company_name: { type: 'string', example: 'PT Citra Sejahtera' },
-                },
-              },
-            },
-          },
-        },
-        responses: {
-          '201': { description: 'Akun berhasil didaftarkan' },
-          '400': { description: 'Data pendaftaran tidak lengkap' },
-          '409': { description: 'Email telah terdaftar' },
-        },
-      },
-    },
-    '/api/v1/client/dashboard/overview': {
-      get: {
-        summary: 'Ringkasan overview perikatan dan dokumen klien',
-        responses: { '200': { description: 'Statistik konsultasi aktif dan dokumen' } },
-      },
-    },
-    '/api/v1/admin/dashboard/overview': {
-      get: {
-        summary: 'Statistik operasional penugasan admin',
-        responses: { '200': { description: 'Overview operasional' } },
-      },
-    },
-  },
-};
+// Scalar API Reference documentation – loads full OpenAPI spec from docs/openapi.json
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const openApiPath = path.join(__dirname, '..', 'docs', 'openapi.json');
+
+let openApiContent: Record<string, unknown>;
+try {
+  openApiContent = JSON.parse(fs.readFileSync(openApiPath, 'utf-8'));
+} catch {
+  console.warn('⚠️  docs/openapi.json not found – Scalar will show minimal spec');
+  openApiContent = {
+    openapi: '3.1.0',
+    info: { title: 'Zhou Consulting Backend API', version: '1.0.0' },
+    paths: {},
+  };
+}
 
 app.use(
   '/docs',
@@ -186,3 +109,4 @@ app.use(
     favicon: FAVICON_BASE64,
   } as any)
 );
+
