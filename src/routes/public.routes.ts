@@ -11,6 +11,9 @@ import {
   submitContactMessage,
 } from '../controllers/cms.controller.js';
 
+import { validate } from '../middlewares/validator.middleware.js';
+import { contactFormSchema } from '../schemas/public.schema.js';
+
 const router = Router();
 
 router.get('/company-profiles', getCompanyProfiles);
@@ -21,6 +24,6 @@ router.get('/education', getEducation);
 router.get('/careers', getCareers);
 router.post('/careers/:id/apply', applyCareer);
 router.get('/settings/contact', getContactSettings);
-router.post('/contact', submitContactMessage);
+router.post('/contact', validate(contactFormSchema), submitContactMessage);
 
 export default router;

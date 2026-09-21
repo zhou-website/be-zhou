@@ -7,6 +7,7 @@ let superadminToken = '';
 let adminToken = '';
 let clientToken = '';
 let testAdminId = 0;
+let testClientId = 3;
 let testProjectId = 1;
 let testTaskId = 1;
 
@@ -49,6 +50,9 @@ describe('🎯 Zhou Consulting — 46 Endpoint Full Automated Test Suite', () =>
     const cliJson = await cliRes.json();
     assert.ok(cliJson.data?.token, `Client login failed: ${JSON.stringify(cliJson)}`);
     clientToken = cliJson.data.token;
+    if (cliJson.data.user?.id) {
+      testClientId = cliJson.data.user.id;
+    }
   });
 
   // ==========================================
@@ -351,7 +355,7 @@ describe('🎯 Zhou Consulting — 46 Endpoint Full Automated Test Suite', () =>
         },
         body: JSON.stringify({
           project_code: randomCode,
-          client_id: 6,
+          client_id: testClientId,
           service_id: 1,
           title: 'Konsultasi Perencanaan Pajak Otomatis',
           description: 'Dibuat oleh automated test runner',
