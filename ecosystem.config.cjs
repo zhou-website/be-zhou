@@ -2,7 +2,7 @@ module.exports = {
   apps: [
     {
       name: 'zhou-backend',
-      script: './dist/server.js',
+      script: './dist/src/server.js',
       instances: 'max', // Memanfaatkan 2 vCPU Biznet Gio
       exec_mode: 'cluster',
       max_memory_restart: '800M', // Sesuai PRD Arsitektur (max-memory-restart: 800MB)
