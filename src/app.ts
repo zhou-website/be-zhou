@@ -118,26 +118,32 @@ app.get('/docs/favicon.ico', serveFavicon);
 
 // Health check endpoint
 app.get('/api/health', async (_req: Request, res: Response) => {
-  try {
-    // Check DB
-    await prisma.$queryRaw`SELECT 1`;
-    // Check Redis
-    const redisStatus = redis.status;
+  let dbStatus = 'disconnected';
+  let dbError: string | null = null;
 
-    res.status(200).json({
-      status: 'ok',
-      timestamp: new Date().toISOString(),
-      services: {
-        database: 'connected',
-        redis: redisStatus,
-      },
-    });
+  try {
+    // Check DB connection
+    await prisma.$queryRaw`SELECT 1`;
+    dbStatus = 'connected';
   } catch (error) {
-    res.status(500).json({
-      status: 'degraded',
-      error: (error as Error).message,
-    });
+    dbError = (error as Error).message;
   }
+
+  const redisStatus = redis.status;
+  const isHealthy = dbStatus === 'connected';
+
+  res.status(isHealthy ? 200 : 503).json({
+    status: isHealthy ? 'ok' : 'degraded',
+    timestamp: new Date().toISOString(),
+    services: {
+      database: dbStatus,
+      redis: redisStatus,
+    },
+    message: isHealthy
+      ? 'Seluruh layanan backend (Database PostgreSQL & Cache Redis) berjalan normal.'
+      : `Database PostgreSQL belum aktif atau belum dapat dihubungi. Pastikan Docker aktif dengan: docker compose up -d`,
+    error: dbError || undefined,
+  });
 });
 
 // Mount API v1 routes
