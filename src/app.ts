@@ -113,7 +113,9 @@ app.use('/api/v1', apiRateLimiter, apiRoutes);
 // Scalar API Reference documentation – loads full OpenAPI spec from docs/openapi.json
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const openApiPath = path.join(__dirname, '..', 'docs', 'openapi.json');
+const primaryOpenApiPath = path.resolve(process.cwd(), 'docs', 'openapi.json');
+const fallbackOpenApiPath = path.join(__dirname, '..', 'docs', 'openapi.json');
+const openApiPath = fs.existsSync(primaryOpenApiPath) ? primaryOpenApiPath : fallbackOpenApiPath;
 
 let openApiContent: Record<string, unknown>;
 try {
