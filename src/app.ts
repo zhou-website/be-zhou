@@ -133,6 +133,7 @@ app.use(
   '/docs',
   apiReference({
     content: openApiContent,
+    servers: (openApiContent as any)?.servers,
     favicon: FAVICON_BASE64,
   } as any)
 );

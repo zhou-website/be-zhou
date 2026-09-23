@@ -12,7 +12,7 @@
   "servers": [
     {
       "url": "http://43.173.2.162",
-      "description": "VPS Live Server (Dev/Staging)"
+      "description": "VPS Deployed Server (Dev/Staging)"
     },
     {
       "url": "http://localhost:5000",
