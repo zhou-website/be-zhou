@@ -10,6 +10,7 @@ import { redis } from './config/redis.js';
 import { initSentry } from './config/sentry.js';
 import { apiRateLimiter } from './middlewares/rateLimiter.middleware.js';
 import apiRoutes from './routes/index.js';
+import { getApiGuide } from './controllers/guide.controller.js';
 
 // Inisialisasi Sentry Error Tracking (PRD Arsitektur)
 initSentry();
@@ -26,13 +27,16 @@ app.use(
         'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://cdn.jsdelivr.net', 'https://*.scalar.com'],
         'font-src': ["'self'", 'https://fonts.gstatic.com', 'https://fonts.scalar.com', 'https://*.scalar.com', 'data:', 'https://cdn.jsdelivr.net'],
         'img-src': ["'self'", 'data:', 'https:', 'blob:'],
-        'connect-src': ["'self'", 'https:'],
+        'connect-src': ["'self'", 'https:', 'http:', '*'],
       },
     },
     crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    crossOriginOpenerPolicy: false,
   })
 );
-// Dynamic CORS configuration to support Next.js (port 3000/3001) & Vite (port 5173/5174) in local development
+
+// Comprehensive CORS configuration for frontend testing, PM evaluation, and production
 const allowedOrigins = [
   process.env.FRONTEND_URL,
   'http://localhost:3000',
@@ -40,31 +44,47 @@ const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:5174',
   'http://127.0.0.1:3000',
+  'http://127.0.0.1:3001',
   'http://127.0.0.1:5173',
+  'http://127.0.0.1:5174',
 ].filter(Boolean) as string[];
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (e.g., Postman, cURL, automated tests)
+      // Mengizinkan request tanpa origin (seperti Postman, cURL, automated tests, mobile apps)
       if (!origin) return callback(null, true);
 
-      if (
-        allowedOrigins.includes(origin) ||
-        /^http:\/\/localhost:\d+$/.test(origin) ||
-        /^http:\/\/127\.0\.0\.1:\d+$/.test(origin)
-      ) {
-        return callback(null, true);
-      }
-      return callback(null, true); // Dev-friendly fallback
+      // Selama fase pengujian & deployment, izinkan seluruh origin dan pantulkan kembali
+      // agar credentials: true berfungsi sempurna tanpa kendala origin mismatch
+      return callback(null, true);
     },
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With',
+      'Accept',
+      'Origin',
+      'Access-Control-Request-Method',
+      'Access-Control-Request-Headers',
+      'sentry-trace',
+      'baggage',
+      'Cache-Control',
+      'Pragma',
+      'X-CSRF-Token',
+    ],
+    exposedHeaders: ['Content-Range', 'X-Content-Range', 'Authorization'],
+    optionsSuccessStatus: 200,
   })
 );
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Panduan Pengetesan API & Landing Page untuk Tester / PM / Developer
+app.get('/', getApiGuide);
+app.get('/api', getApiGuide);
 
 // Favicon handler to serve valid icon and eliminate browser 404
 const FAVICON_BASE64 =
