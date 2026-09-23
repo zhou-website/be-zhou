@@ -11,8 +11,12 @@
   },
   "servers": [
     {
+      "url": "/",
+      "description": "Server Aktif Saat Ini (Auto-Detect)"
+    },
+    {
       "url": "http://43.173.2.162",
-      "description": "VPS Deployed Server (Dev/Staging)"
+      "description": "VPS Server (HTTP)"
     },
     {
       "url": "http://localhost:5000",

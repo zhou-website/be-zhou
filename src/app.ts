@@ -18,23 +18,36 @@ initSentry();
 export const app: Express = express();
 
 // Security and utility middleware
-app.use(
-  helmet({
-    contentSecurityPolicy: {
-      directives: {
-        ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-        'script-src': ["'self'", "'unsafe-inline'", "'unsafe-eval'", 'https://cdn.jsdelivr.net', 'https://unpkg.com', 'https://*.scalar.com'],
-        'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://cdn.jsdelivr.net', 'https://*.scalar.com'],
-        'font-src': ["'self'", 'https://fonts.gstatic.com', 'https://fonts.scalar.com', 'https://*.scalar.com', 'data:', 'https://cdn.jsdelivr.net'],
-        'img-src': ["'self'", 'data:', 'https:', 'blob:'],
-        'connect-src': ["'self'", 'https:', 'http:', '*'],
-      },
+const helmetMiddleware = helmet({
+  contentSecurityPolicy: {
+    directives: {
+      ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+      'script-src': ["'self'", "'unsafe-inline'", "'unsafe-eval'", 'https://cdn.jsdelivr.net', 'https://unpkg.com', 'https://*.scalar.com', 'blob:'],
+      'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://cdn.jsdelivr.net', 'https://*.scalar.com'],
+      'font-src': ["'self'", 'https://fonts.gstatic.com', 'https://fonts.scalar.com', 'https://*.scalar.com', 'data:', 'https://cdn.jsdelivr.net'],
+      'img-src': ["'self'", 'data:', 'https:', 'blob:'],
+      'connect-src': ["'self'", 'https:', 'http:', '*'],
+      'worker-src': ["'self'", 'blob:'],
+      'child-src': ["'self'", 'blob:'],
+      // PENTING: Matikan upgrade-insecure-requests agar browser tidak memaksa HTTPS saat pengujian via HTTP/IP VPS
+      'upgrade-insecure-requests': null,
     },
-    crossOriginEmbedderPolicy: false,
-    crossOriginResourcePolicy: { policy: 'cross-origin' },
-    crossOriginOpenerPolicy: false,
-  })
-);
+  },
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  crossOriginOpenerPolicy: false,
+  originAgentCluster: false,
+});
+
+// Terapkan Helmet untuk seluruh request kecuali rute /docs (Scalar Documentation)
+// agar komponen interaktif, blob web worker, dan pengujian request Scalar berjalan mulus tanpa restriksi browser
+app.use((req, res, next) => {
+  if (req.path.startsWith('/docs')) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    return next();
+  }
+  return helmetMiddleware(req, res, next);
+});
 
 // Comprehensive CORS configuration for frontend testing, PM evaluation, and production
 const allowedOrigins = [
