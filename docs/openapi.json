@@ -11,6 +11,10 @@
   },
   "servers": [
     {
+      "url": "http://43.173.2.162",
+      "description": "VPS Live Server (Dev/Staging)"
+    },
+    {
       "url": "http://localhost:5000",
       "description": "Local Development Server"
     }
