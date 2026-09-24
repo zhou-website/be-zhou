@@ -3,7 +3,7 @@
   "info": {
     "title": "Zhou Consulting Backend API",
     "version": "1.0.0",
-    "description": "RESTful API Backend Zhou Consulting (PRD v2 Revisi & Figma Design) mencakup Modul Auth/User, Portal Klien, Portal Admin/Operasional, CMS Publik, dan Superadmin Log Audit.\n\nFormat respons standar:\n```json\n{\n  \"success\": true,\n  \"message\": \"Deskripsi operasi\",\n  \"data\": { ... }\n}\n```",
+    "description": "# 📘 Zhou Consulting RESTful API Documentation & Testing Guide\n\nDokumentasi resmi dan panduan pengujian interaktif untuk backend **Zhou Consulting** (sesuai PRD v2 Revisi & Desain Figma). API ini mencakup seluruh layanan:\n- **Autentikasi & Pengguna** (JWT, RBAC, Redis Token Blacklist, Profil, Password Reset via Resend)\n- **Portal Klien** (Dashboard, Booking Konsultasi, Upload Dokumen via Supabase Signed URL, Tracking Tugas, AI Assistant)\n- **Portal Operasional Admin** (Manajemen Konsultasi, Assign Konsultan, Task Checklist, Review Dokumen)\n- **CMS & Katalog Publik** (Profil Perusahaan, Layanan Pajak & Akuntansi, Artikel Edukasi, Regulasi Pajak, Karir, Kontak)\n- **Superadmin Governance** (Manajemen Staf Admin & Append-Only PostgreSQL Database Audit Logs)\n\n---\n\n## 🔑 1. Kredensial Akun Pengujian (Seed Database)\nGunakan akun uji berikut untuk mencoba berbagai tingkat otorisasi (RBAC):\n\n| Role | Nama Pengguna | Alamat Email | Kata Sandi | Lingkup Hak Akses |\n| :--- | :--- | :--- | :--- | :--- |\n| **SUPERADMIN** | Super Administrator Zhou | `superadmin@zhouconsulting.com` | `SuperAdmin123!` | Audit Log sistem (append-only), kelola akun staf admin, CMS, dan seluruh endpoint |\n| **ADMIN** | Konsultan Senior Zhou | `admin@zhouconsulting.com` | `Admin123!` | Manajemen perikatan klien, kelola tiket konsultasi, verifikasi dokumen, checklist tugas |\n| **USER (Klien)** | Budi Pratama (Direktur) | `klien@perusahaan.com` | `Client123!` | Dashboard klien, booking konsultasi, upload dokumen berkas, tracking status layanan |\n\n> 💡 **Info Database**: Jika database baru saja di-deploy atau direset, seluruh akun di atas dapat diinisialisasi ulang kapan saja dengan perintah `npm run prisma:seed`.\n\n---\n\n## 🧪 2. Panduan Langkah Pengujian API di Scalar (Testing Flow)\n\nIkuti urutan langkah pengujian berikut agar pengujian berjalan mulus dan tidak mengalami penolakan otorisasi:\n\n### Langkah A: Menguji Endpoint Publik (Tanpa Autentikasi)\n1. Pilih endpoint di bawah tag **Infrastructure** atau **Public CMS**, misalnya:\n   - `GET /api/health` — Memeriksa status kesehatan server, PostgreSQL, dan Redis.\n   - `GET /api/v1/public/services` — Memuat katalog layanan pajak & akuntansi Zhou Consulting.\n2. Klik tombol **Test Request** di panel kanan.\n3. Klik tombol **Send**.\n4. Respons `200 OK` beserta data JSON akan langsung muncul.\n\n### Langkah B: Login & Mendapatkan Token JWT\n1. Buka grup **Auth** lalu pilih `POST /api/v1/auth/login`.\n2. Klik tombol **Test Request**.\n3. Pada tab **Body (JSON)**, masukkan kredensial yang ingin diuji:\n   ```json\n   {\n     \"email\": \"admin@zhouconsulting.com\",\n     \"password\": \"Admin123!\"\n   }\n   ```\n4. Klik tombol **Send**.\n5. Di panel respons bawah, Anda akan menerima token JWT:\n   ```json\n   {\n     \"success\": true,\n     \"message\": \"Login berhasil\",\n     \"data\": {\n       \"token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\",\n       \"user\": { ... }\n     }\n   }\n   ```\n6. **Salin (Copy)** nilai teks token yang ada di dalam `data.token`.\n\n### Langkah C: Menempelkan Token ke Scalar (Authorize)\n1. Di bagian atas panel interaktif Scalar atau opsi otorisasi, cari kolom **Security / BearerAuth** (atau field input Token).\n2. Tempelkan (*paste*) nilai token JWT yang Anda salin tadi.\n3. Setelah token terpasang, Scalar akan secara otomatis menyertakan header berikut pada setiap request:\n   ```http\n   Authorization: Bearer <token_jwt_anda>\n   ```\n\n### Langkah D: Menguji Endpoint Terproteksi Berdasarkan Role (RBAC)\nSekarang Anda dapat menguji endpoint yang memerlukan hak akses sesuai role yang sedang aktif:\n- **Profil Pengguna**: Coba `GET /api/v1/user/profile` (dapat diakses oleh semua role yang sedang login).\n- **Portal Klien**: Jika login sebagai `klien@perusahaan.com`, coba `GET /api/v1/client/dashboard` atau buat pemesanan di `POST /api/v1/client/consultations`.\n- **Portal Admin**: Jika login sebagai `admin@zhouconsulting.com`, coba `GET /api/v1/admin/consultations` atau `GET /api/v1/admin/tasks`.\n- **Superadmin Audit Log**: Jika login sebagai `superadmin@zhouconsulting.com`, coba `GET /api/v1/superadmin/audit-logs` untuk melihat rekam jejak audit sistem.\n  *(Catatan: Jika akun Klien mencoba mengakses endpoint Admin/Superadmin, sistem akan merespons dengan status `403 Forbidden` sesuai aturan RBAC).*\n\n### Langkah E: Logout & Pengujian Redis Blacklist Token\n1. Buka endpoint `POST /api/v1/auth/logout`.\n2. Klik **Send** dengan token aktif.\n3. Token tersebut akan dimasukkan ke dalam daftar hitam (*blacklist*) Redis.\n4. Coba panggil kembali endpoint profil pengguna dengan token tersebut, sistem akan menolak dengan respons `401 Unauthorized`.\n\n---\n\n## 📐 3. Format Standar Komunikasi & Respon API\n\n### Respon Berhasil (200 OK / 201 Created)\n```json\n{\n  \"success\": true,\n  \"message\": \"Deskripsi singkat operasi berhasil\",\n  \"data\": { ... },\n  \"meta\": { \"page\": 1, \"limit\": 10, \"total\": 25 }\n}\n```\n\n### Respon Gagal / Validasi (400 / 401 / 403 / 404 / 422 / 500)\n```json\n{\n  \"success\": false,\n  \"message\": \"Pesan kesalahan yang ramah pengguna\",\n  \"error\": \"Rincian teknis kegagalan (opsional)\"\n}\n```\n\n---\n\n## 🚦 4. Daftar Kode Status HTTP Penting\n- `200 OK`: Permintaan berhasil dan data dikembalikan.\n- `201 Created`: Entitas / data baru berhasil disimpan ke database.\n- `400 Bad Request`: Payload body JSON tidak lengkap atau melanggar skema validasi.\n- `401 Unauthorized`: Token JWT belum disertakan, format tidak sesuai, atau sudah kedaluwarsa/logout.\n- `403 Forbidden`: Role akun Anda tidak memiliki izin mengakses endpoint ini (Proteksi RBAC).\n- `404 Not Found`: Sumber daya, dokumen, atau rute URL tidak ditemukan.\n- `429 Too Many Requests`: Melebihi ambang batas rate limiting (proteksi DDoS / Brute-force).\n- `500 Internal Server Error`: Terjadi kegagalan di sisi server internal (otomatis terlacak di Sentry).",
     "contact": {
       "name": "Zhou Consulting",
       "url": "https://zhouconsulting.com"
@@ -24,14 +24,38 @@
     }
   ],
   "tags": [
-    { "name": "Infrastructure", "description": "Health check dan status sistem" },
-    { "name": "Auth", "description": "Registrasi, login, logout, forgot & reset password" },
-    { "name": "User", "description": "Profil pengguna (semua role)" },
-    { "name": "Client", "description": "Portal klien: dashboard, konsultasi, dokumen, chatbot" },
-    { "name": "Admin", "description": "Portal admin operasional: konsultasi, task, dokumen" },
-    { "name": "CMS Admin", "description": "Manajemen konten CMS oleh admin" },
-    { "name": "Public CMS", "description": "Konten publik: profil, layanan, regulasi, edukasi, karir, kontak" },
-    { "name": "Superadmin", "description": "Manajemen staf admin dan audit log" }
+    {
+      "name": "Infrastructure",
+      "description": "Health check dan status sistem"
+    },
+    {
+      "name": "Auth",
+      "description": "Registrasi, login, logout, forgot & reset password"
+    },
+    {
+      "name": "User",
+      "description": "Profil pengguna (semua role)"
+    },
+    {
+      "name": "Client",
+      "description": "Portal klien: dashboard, konsultasi, dokumen, chatbot"
+    },
+    {
+      "name": "Admin",
+      "description": "Portal admin operasional: konsultasi, task, dokumen"
+    },
+    {
+      "name": "CMS Admin",
+      "description": "Manajemen konten CMS oleh admin"
+    },
+    {
+      "name": "Public CMS",
+      "description": "Konten publik: profil, layanan, regulasi, edukasi, karir, kontak"
+    },
+    {
+      "name": "Superadmin",
+      "description": "Manajemen staf admin dan audit log"
+    }
   ],
   "components": {
     "securitySchemes": {
@@ -46,209 +70,581 @@
       "SuccessResponse": {
         "type": "object",
         "properties": {
-          "success": { "type": "boolean", "example": true },
-          "message": { "type": "string" },
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "message": {
+            "type": "string"
+          },
           "data": {}
         }
       },
       "ErrorResponse": {
         "type": "object",
         "properties": {
-          "success": { "type": "boolean", "example": false },
-          "message": { "type": "string" },
+          "success": {
+            "type": "boolean",
+            "example": false
+          },
+          "message": {
+            "type": "string"
+          },
           "errors": {}
         }
       },
       "UserProfile": {
         "type": "object",
         "properties": {
-          "id": { "type": "integer", "example": 1 },
-          "name": { "type": "string", "example": "Admin Zhou" },
-          "email": { "type": "string", "format": "email", "example": "admin@zhouconsulting.com" },
-          "role": { "type": "string", "enum": ["USER", "ADMIN", "SUPERADMIN"], "example": "ADMIN" },
-          "phone": { "type": "string", "example": "+6281234567890" },
-          "company_name": { "type": "string", "example": "PT Citra Sejahtera" },
-          "avatar_url": { "type": "string", "example": "https://storage.example.com/avatars/admin.jpg" },
-          "created_at": { "type": "string", "format": "date-time" }
+          "id": {
+            "type": "integer",
+            "example": 1
+          },
+          "name": {
+            "type": "string",
+            "example": "Admin Zhou"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "admin@zhouconsulting.com"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "USER",
+              "ADMIN",
+              "SUPERADMIN"
+            ],
+            "example": "ADMIN"
+          },
+          "phone": {
+            "type": "string",
+            "example": "+6281234567890"
+          },
+          "company_name": {
+            "type": "string",
+            "example": "PT Citra Sejahtera"
+          },
+          "avatar_url": {
+            "type": "string",
+            "example": "https://storage.example.com/avatars/admin.jpg"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       },
       "LoginResponse": {
         "type": "object",
         "properties": {
-          "token": { "type": "string", "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." },
-          "user": { "$ref": "#/components/schemas/UserProfile" }
+          "token": {
+            "type": "string",
+            "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserProfile"
+          }
         }
       },
       "ConsultationProject": {
         "type": "object",
         "properties": {
-          "id": { "type": "integer", "example": 1 },
-          "project_code": { "type": "string", "example": "ZHOU-123456" },
-          "client_id": { "type": "integer", "example": 5 },
-          "service_id": { "type": "integer", "example": 2 },
-          "title": { "type": "string", "example": "Audit Laporan Keuangan Q3 2026" },
-          "description": { "type": "string", "example": "Perikatan audit laporan keuangan kuartal 3" },
-          "status": { "type": "string", "enum": ["IN_PROGRESS", "COMPLETED"], "example": "IN_PROGRESS" },
-          "progress_percent": { "type": "integer", "example": 40 },
-          "created_at": { "type": "string", "format": "date-time" },
-          "updated_at": { "type": "string", "format": "date-time" }
+          "id": {
+            "type": "integer",
+            "example": 1
+          },
+          "project_code": {
+            "type": "string",
+            "example": "ZHOU-123456"
+          },
+          "client_id": {
+            "type": "integer",
+            "example": 5
+          },
+          "service_id": {
+            "type": "integer",
+            "example": 2
+          },
+          "title": {
+            "type": "string",
+            "example": "Audit Laporan Keuangan Q3 2026"
+          },
+          "description": {
+            "type": "string",
+            "example": "Perikatan audit laporan keuangan kuartal 3"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "IN_PROGRESS",
+              "COMPLETED"
+            ],
+            "example": "IN_PROGRESS"
+          },
+          "progress_percent": {
+            "type": "integer",
+            "example": 40
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       },
       "ProjectTask": {
         "type": "object",
         "properties": {
-          "id": { "type": "integer", "example": 1 },
-          "project_id": { "type": "integer", "example": 1 },
-          "task_name": { "type": "string", "example": "Review laporan neraca" },
-          "is_completed": { "type": "boolean", "example": false },
-          "updated_at": { "type": "string", "format": "date-time" }
+          "id": {
+            "type": "integer",
+            "example": 1
+          },
+          "project_id": {
+            "type": "integer",
+            "example": 1
+          },
+          "task_name": {
+            "type": "string",
+            "example": "Review laporan neraca"
+          },
+          "is_completed": {
+            "type": "boolean",
+            "example": false
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       },
       "ProjectDocument": {
         "type": "object",
         "properties": {
-          "id": { "type": "integer", "example": 1 },
-          "project_id": { "type": "integer", "example": 1 },
-          "file_name": { "type": "string", "example": "Laporan_Audit_Q3_2026.pdf" },
-          "file_path": { "type": "string", "example": "documents/project-1/Laporan_Audit_Q3_2026.pdf" },
-          "file_size": { "type": "string", "example": "1.2 MB" },
-          "file_type": { "type": "string", "enum": ["PDF", "XLSX", "DOCX"], "example": "PDF" },
-          "uploaded_by": { "type": "integer", "example": 2 },
-          "created_at": { "type": "string", "format": "date-time" }
+          "id": {
+            "type": "integer",
+            "example": 1
+          },
+          "project_id": {
+            "type": "integer",
+            "example": 1
+          },
+          "file_name": {
+            "type": "string",
+            "example": "Laporan_Audit_Q3_2026.pdf"
+          },
+          "file_path": {
+            "type": "string",
+            "example": "documents/project-1/Laporan_Audit_Q3_2026.pdf"
+          },
+          "file_size": {
+            "type": "string",
+            "example": "1.2 MB"
+          },
+          "file_type": {
+            "type": "string",
+            "enum": [
+              "PDF",
+              "XLSX",
+              "DOCX"
+            ],
+            "example": "PDF"
+          },
+          "uploaded_by": {
+            "type": "integer",
+            "example": 2
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       },
       "Service": {
         "type": "object",
         "properties": {
-          "id": { "type": "integer", "example": 1 },
-          "service_code": { "type": "string", "example": "TAX-001" },
-          "service_name": { "type": "string", "example": "Konsultan Pajak Tahunan" },
-          "category": { "type": "string", "example": "Tax Service" },
-          "description": { "type": "string", "example": "Layanan konsultasi pelaporan SPT tahunan badan" },
-          "is_active": { "type": "boolean", "example": true },
-          "created_at": { "type": "string", "format": "date-time" },
-          "updated_at": { "type": "string", "format": "date-time" }
+          "id": {
+            "type": "integer",
+            "example": 1
+          },
+          "service_code": {
+            "type": "string",
+            "example": "TAX-001"
+          },
+          "service_name": {
+            "type": "string",
+            "example": "Konsultan Pajak Tahunan"
+          },
+          "category": {
+            "type": "string",
+            "example": "Tax Service"
+          },
+          "description": {
+            "type": "string",
+            "example": "Layanan konsultasi pelaporan SPT tahunan badan"
+          },
+          "is_active": {
+            "type": "boolean",
+            "example": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       },
       "CompanyProfile": {
         "type": "object",
         "properties": {
-          "id": { "type": "integer", "example": 1 },
-          "section_key": { "type": "string", "example": "vision" },
-          "title": { "type": "string", "example": "Visi Perusahaan" },
-          "content": { "type": "string", "example": "Menjadi konsultan pajak terpercaya di Indonesia" },
-          "updated_by": { "type": "integer", "example": 2 },
-          "updated_at": { "type": "string", "format": "date-time" }
+          "id": {
+            "type": "integer",
+            "example": 1
+          },
+          "section_key": {
+            "type": "string",
+            "example": "vision"
+          },
+          "title": {
+            "type": "string",
+            "example": "Visi Perusahaan"
+          },
+          "content": {
+            "type": "string",
+            "example": "Menjadi konsultan pajak terpercaya di Indonesia"
+          },
+          "updated_by": {
+            "type": "integer",
+            "example": 2
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       },
       "TaxRate": {
         "type": "object",
         "properties": {
-          "id": { "type": "integer", "example": 1 },
-          "currency_code": { "type": "string", "example": "USD" },
-          "rate_value": { "type": "number", "example": 15890.50 },
-          "effective_start_date": { "type": "string", "format": "date", "example": "2026-09-15" },
-          "effective_end_date": { "type": "string", "format": "date", "example": "2026-09-21" },
-          "created_at": { "type": "string", "format": "date-time" }
+          "id": {
+            "type": "integer",
+            "example": 1
+          },
+          "currency_code": {
+            "type": "string",
+            "example": "USD"
+          },
+          "rate_value": {
+            "type": "number",
+            "example": 15890.5
+          },
+          "effective_start_date": {
+            "type": "string",
+            "format": "date",
+            "example": "2026-09-15"
+          },
+          "effective_end_date": {
+            "type": "string",
+            "format": "date",
+            "example": "2026-09-21"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       },
       "Regulation": {
         "type": "object",
         "properties": {
-          "id": { "type": "integer", "example": 1 },
-          "title": { "type": "string", "example": "PMK No. 66 Tahun 2023" },
-          "regulation_type": { "type": "string", "example": "PMK" },
-          "file_path": { "type": "string", "example": "regulations/pmk-66-2023.pdf" },
-          "file_size": { "type": "string", "example": "2.5 MB" },
-          "uploaded_by": { "type": "integer", "example": 2 },
-          "created_at": { "type": "string", "format": "date-time" }
+          "id": {
+            "type": "integer",
+            "example": 1
+          },
+          "title": {
+            "type": "string",
+            "example": "PMK No. 66 Tahun 2023"
+          },
+          "regulation_type": {
+            "type": "string",
+            "example": "PMK"
+          },
+          "file_path": {
+            "type": "string",
+            "example": "regulations/pmk-66-2023.pdf"
+          },
+          "file_size": {
+            "type": "string",
+            "example": "2.5 MB"
+          },
+          "uploaded_by": {
+            "type": "integer",
+            "example": 2
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       },
       "EducationContent": {
         "type": "object",
         "properties": {
-          "id": { "type": "integer", "example": 1 },
-          "title": { "type": "string", "example": "Panduan Pengisian SPT Tahunan Badan" },
-          "category": { "type": "string", "example": "Panduan Pajak" },
-          "content_type": { "type": "string", "enum": ["ARTICLE", "GUIDE"], "example": "GUIDE" },
-          "body": { "type": "string", "example": "Berikut langkah-langkah pengisian SPT..." },
-          "file_path": { "type": "string", "example": "education/panduan-spt-badan.pdf" },
-          "created_by": { "type": "integer", "example": 2 },
-          "created_at": { "type": "string", "format": "date-time" },
-          "updated_at": { "type": "string", "format": "date-time" }
+          "id": {
+            "type": "integer",
+            "example": 1
+          },
+          "title": {
+            "type": "string",
+            "example": "Panduan Pengisian SPT Tahunan Badan"
+          },
+          "category": {
+            "type": "string",
+            "example": "Panduan Pajak"
+          },
+          "content_type": {
+            "type": "string",
+            "enum": [
+              "ARTICLE",
+              "GUIDE"
+            ],
+            "example": "GUIDE"
+          },
+          "body": {
+            "type": "string",
+            "example": "Berikut langkah-langkah pengisian SPT..."
+          },
+          "file_path": {
+            "type": "string",
+            "example": "education/panduan-spt-badan.pdf"
+          },
+          "created_by": {
+            "type": "integer",
+            "example": 2
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       },
       "CareerJob": {
         "type": "object",
         "properties": {
-          "id": { "type": "integer", "example": 1 },
-          "position_code": { "type": "string", "example": "TAX-SR-001" },
-          "position_title": { "type": "string", "example": "Senior Tax Consultant" },
-          "level": { "type": "string", "example": "Senior" },
-          "location": { "type": "string", "example": "Jakarta Selatan" },
-          "description": { "type": "string", "example": "Bertanggung jawab atas pelaporan pajak klien korporasi" },
-          "is_active": { "type": "boolean", "example": true },
-          "created_at": { "type": "string", "format": "date-time" },
-          "updated_at": { "type": "string", "format": "date-time" }
+          "id": {
+            "type": "integer",
+            "example": 1
+          },
+          "position_code": {
+            "type": "string",
+            "example": "TAX-SR-001"
+          },
+          "position_title": {
+            "type": "string",
+            "example": "Senior Tax Consultant"
+          },
+          "level": {
+            "type": "string",
+            "example": "Senior"
+          },
+          "location": {
+            "type": "string",
+            "example": "Jakarta Selatan"
+          },
+          "description": {
+            "type": "string",
+            "example": "Bertanggung jawab atas pelaporan pajak klien korporasi"
+          },
+          "is_active": {
+            "type": "boolean",
+            "example": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       },
       "JobApplication": {
         "type": "object",
         "properties": {
-          "id": { "type": "integer", "example": 1 },
-          "job_id": { "type": "integer", "example": 1 },
-          "applicant_name": { "type": "string", "example": "Budi Santoso" },
-          "applicant_email": { "type": "string", "format": "email", "example": "budi@email.com" },
-          "applicant_phone": { "type": "string", "example": "+6281234567890" },
-          "cv_file_path": { "type": "string", "example": "careers/cv-budi-santoso.pdf" },
-          "applied_at": { "type": "string", "format": "date-time" }
+          "id": {
+            "type": "integer",
+            "example": 1
+          },
+          "job_id": {
+            "type": "integer",
+            "example": 1
+          },
+          "applicant_name": {
+            "type": "string",
+            "example": "Budi Santoso"
+          },
+          "applicant_email": {
+            "type": "string",
+            "format": "email",
+            "example": "budi@email.com"
+          },
+          "applicant_phone": {
+            "type": "string",
+            "example": "+6281234567890"
+          },
+          "cv_file_path": {
+            "type": "string",
+            "example": "careers/cv-budi-santoso.pdf"
+          },
+          "applied_at": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       },
       "ChatbotFaq": {
         "type": "object",
         "properties": {
-          "id": { "type": "integer", "example": 1 },
-          "category": { "type": "string", "example": "Pajak" },
-          "question": { "type": "string", "example": "Bagaimana cara melaporkan SPT tahunan?" },
-          "answer_template": { "type": "string", "example": "SPT tahunan dapat dilaporkan melalui DJP Online..." }
+          "id": {
+            "type": "integer",
+            "example": 1
+          },
+          "category": {
+            "type": "string",
+            "example": "Pajak"
+          },
+          "question": {
+            "type": "string",
+            "example": "Bagaimana cara melaporkan SPT tahunan?"
+          },
+          "answer_template": {
+            "type": "string",
+            "example": "SPT tahunan dapat dilaporkan melalui DJP Online..."
+          }
         }
       },
       "SiteSetting": {
         "type": "object",
         "properties": {
-          "id": { "type": "integer", "example": 1 },
-          "setting_key": { "type": "string", "example": "whatsapp_number" },
-          "setting_value": { "type": "string", "example": "+6281234567890" },
-          "closed_message": { "type": "string", "example": "Kantor tutup, hubungi kembali hari kerja" },
-          "updated_at": { "type": "string", "format": "date-time" }
+          "id": {
+            "type": "integer",
+            "example": 1
+          },
+          "setting_key": {
+            "type": "string",
+            "example": "whatsapp_number"
+          },
+          "setting_value": {
+            "type": "string",
+            "example": "+6281234567890"
+          },
+          "closed_message": {
+            "type": "string",
+            "example": "Kantor tutup, hubungi kembali hari kerja"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       },
       "AuditLog": {
         "type": "object",
         "properties": {
-          "id": { "type": "integer", "example": 1 },
-          "admin_id": { "type": "integer", "example": 2 },
-          "client_id": { "type": "integer", "example": 5 },
-          "project_id": { "type": "integer", "example": 1 },
-          "action": { "type": "string", "example": "STATUS_UPDATE" },
-          "status_before": { "type": "string", "example": "IN_PROGRESS" },
-          "status_after": { "type": "string", "example": "COMPLETED" },
-          "file_name": { "type": "string", "example": "laporan.pdf" },
-          "description": { "type": "string", "example": "Perubahan status perikatan [ZHOU-123456] dari IN_PROGRESS menjadi COMPLETED" },
-          "created_at": { "type": "string", "format": "date-time" }
+          "id": {
+            "type": "integer",
+            "example": 1
+          },
+          "admin_id": {
+            "type": "integer",
+            "example": 2
+          },
+          "client_id": {
+            "type": "integer",
+            "example": 5
+          },
+          "project_id": {
+            "type": "integer",
+            "example": 1
+          },
+          "action": {
+            "type": "string",
+            "example": "STATUS_UPDATE"
+          },
+          "status_before": {
+            "type": "string",
+            "example": "IN_PROGRESS"
+          },
+          "status_after": {
+            "type": "string",
+            "example": "COMPLETED"
+          },
+          "file_name": {
+            "type": "string",
+            "example": "laporan.pdf"
+          },
+          "description": {
+            "type": "string",
+            "example": "Perubahan status perikatan [ZHOU-123456] dari IN_PROGRESS menjadi COMPLETED"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       },
       "AdminUser": {
         "type": "object",
         "properties": {
-          "id": { "type": "integer", "example": 2 },
-          "name": { "type": "string", "example": "Staff Admin" },
-          "email": { "type": "string", "format": "email", "example": "staff@zhouconsulting.com" },
-          "role": { "type": "string", "enum": ["ADMIN", "SUPERADMIN"], "example": "ADMIN" },
-          "phone": { "type": "string", "example": "+6281234567890" },
-          "is_active": { "type": "boolean", "example": true },
-          "created_at": { "type": "string", "format": "date-time" },
-          "updated_at": { "type": "string", "format": "date-time" }
+          "id": {
+            "type": "integer",
+            "example": 2
+          },
+          "name": {
+            "type": "string",
+            "example": "Staff Admin"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "staff@zhouconsulting.com"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "ADMIN",
+              "SUPERADMIN"
+            ],
+            "example": "ADMIN"
+          },
+          "phone": {
+            "type": "string",
+            "example": "+6281234567890"
+          },
+          "is_active": {
+            "type": "boolean",
+            "example": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       }
     }
@@ -256,7 +652,9 @@
   "paths": {
     "/api/health": {
       "get": {
-        "tags": ["Infrastructure"],
+        "tags": [
+          "Infrastructure"
+        ],
         "summary": "Health check endpoint",
         "description": "Memeriksa koneksi database PostgreSQL dan Redis, mengembalikan status kesehatan sistem.",
         "responses": {
@@ -267,13 +665,25 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "status": { "type": "string", "example": "ok" },
-                    "timestamp": { "type": "string", "format": "date-time" },
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "services": {
                       "type": "object",
                       "properties": {
-                        "database": { "type": "string", "example": "connected" },
-                        "redis": { "type": "string", "example": "ready" }
+                        "database": {
+                          "type": "string",
+                          "example": "connected"
+                        },
+                        "redis": {
+                          "type": "string",
+                          "example": "ready"
+                        }
                       }
                     }
                   }
@@ -288,8 +698,13 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "status": { "type": "string", "example": "degraded" },
-                    "error": { "type": "string" }
+                    "status": {
+                      "type": "string",
+                      "example": "degraded"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
                   }
                 }
               }
@@ -298,10 +713,11 @@
         }
       }
     },
-
     "/api/v1/auth/register": {
       "post": {
-        "tags": ["Auth"],
+        "tags": [
+          "Auth"
+        ],
         "summary": "Registrasi korporasi klien baru",
         "description": "Mendaftarkan akun klien baru dengan role USER. Email harus unik.",
         "requestBody": {
@@ -310,13 +726,34 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["name", "email", "password"],
+                "required": [
+                  "name",
+                  "email",
+                  "password"
+                ],
                 "properties": {
-                  "name": { "type": "string", "example": "PT Citra Sejahtera" },
-                  "email": { "type": "string", "format": "email", "example": "klien@citrasejahtera.com" },
-                  "password": { "type": "string", "format": "password", "example": "SecurePassword123!" },
-                  "phone": { "type": "string", "example": "+6281234567890" },
-                  "company_name": { "type": "string", "example": "PT Citra Sejahtera" }
+                  "name": {
+                    "type": "string",
+                    "example": "PT Citra Sejahtera"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "klien@citrasejahtera.com"
+                  },
+                  "password": {
+                    "type": "string",
+                    "format": "password",
+                    "example": "SecurePassword123!"
+                  },
+                  "phone": {
+                    "type": "string",
+                    "example": "+6281234567890"
+                  },
+                  "company_name": {
+                    "type": "string",
+                    "example": "PT Citra Sejahtera"
+                  }
                 }
               }
             }
@@ -330,18 +767,45 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Registrasi akun korporasi berhasil" },
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Registrasi akun korporasi berhasil"
+                    },
                     "data": {
                       "type": "object",
                       "properties": {
-                        "id": { "type": "integer", "example": 10 },
-                        "name": { "type": "string", "example": "PT Citra Sejahtera" },
-                        "email": { "type": "string", "example": "klien@citrasejahtera.com" },
-                        "role": { "type": "string", "example": "USER" },
-                        "phone": { "type": "string", "example": "+6281234567890" },
-                        "company_name": { "type": "string", "example": "PT Citra Sejahtera" },
-                        "created_at": { "type": "string", "format": "date-time" }
+                        "id": {
+                          "type": "integer",
+                          "example": 10
+                        },
+                        "name": {
+                          "type": "string",
+                          "example": "PT Citra Sejahtera"
+                        },
+                        "email": {
+                          "type": "string",
+                          "example": "klien@citrasejahtera.com"
+                        },
+                        "role": {
+                          "type": "string",
+                          "example": "USER"
+                        },
+                        "phone": {
+                          "type": "string",
+                          "example": "+6281234567890"
+                        },
+                        "company_name": {
+                          "type": "string",
+                          "example": "PT Citra Sejahtera"
+                        },
+                        "created_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
                       }
                     }
                   }
@@ -351,19 +815,32 @@
           },
           "400": {
             "description": "Data pendaftaran tidak lengkap",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "409": {
             "description": "Email telah terdaftar",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
     },
-
     "/api/v1/auth/login": {
       "post": {
-        "tags": ["Auth"],
+        "tags": [
+          "Auth"
+        ],
         "summary": "Login pengguna (Klien, Admin, Superadmin)",
         "description": "Otentikasi email & password. Mengembalikan JWT token dan profil pengguna.",
         "requestBody": {
@@ -372,10 +849,21 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["email", "password"],
+                "required": [
+                  "email",
+                  "password"
+                ],
                 "properties": {
-                  "email": { "type": "string", "format": "email", "example": "admin@zhouconsulting.com" },
-                  "password": { "type": "string", "format": "password", "example": "password123" }
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "admin@zhouconsulting.com"
+                  },
+                  "password": {
+                    "type": "string",
+                    "format": "password",
+                    "example": "password123"
+                  }
                 }
               }
             }
@@ -389,9 +877,17 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Login berhasil" },
-                    "data": { "$ref": "#/components/schemas/LoginResponse" }
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Login berhasil"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/LoginResponse"
+                    }
                   }
                 }
               }
@@ -399,23 +895,42 @@
           },
           "400": {
             "description": "Email atau kata sandi tidak diisi / tidak valid",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "401": {
             "description": "Kredensial tidak valid",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "403": {
             "description": "Akun dinonaktifkan",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
     },
-
     "/api/v1/auth/google": {
       "post": {
-        "tags": ["Auth"],
+        "tags": [
+          "Auth"
+        ],
         "summary": "Login via Google OAuth (khusus klien)",
         "description": "Otentikasi menggunakan data Google OAuth. Jika pengguna belum terdaftar, akun akan dibuat otomatis dengan role USER.",
         "requestBody": {
@@ -424,10 +939,19 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["email"],
+                "required": [
+                  "email"
+                ],
                 "properties": {
-                  "email": { "type": "string", "format": "email", "example": "klien@gmail.com" },
-                  "name": { "type": "string", "example": "John Doe" }
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "klien@gmail.com"
+                  },
+                  "name": {
+                    "type": "string",
+                    "example": "John Doe"
+                  }
                 }
               }
             }
@@ -441,9 +965,17 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Login Google OAuth berhasil" },
-                    "data": { "$ref": "#/components/schemas/LoginResponse" }
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Login Google OAuth berhasil"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/LoginResponse"
+                    }
                   }
                 }
               }
@@ -451,19 +983,32 @@
           },
           "400": {
             "description": "Data Google OAuth tidak lengkap",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "403": {
             "description": "Akun dinonaktifkan",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
     },
-
     "/api/v1/auth/forgot-password": {
       "post": {
-        "tags": ["Auth"],
+        "tags": [
+          "Auth"
+        ],
         "summary": "Lupa kata sandi – kirim link reset via email",
         "description": "Mengirimkan email berisi tautan reset kata sandi. Respons selalu sukses untuk keamanan (tidak memberitahu apakah email terdaftar atau tidak).",
         "requestBody": {
@@ -472,9 +1017,15 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["email"],
+                "required": [
+                  "email"
+                ],
                 "properties": {
-                  "email": { "type": "string", "format": "email", "example": "klien@citrasejahtera.com" }
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "klien@citrasejahtera.com"
+                  }
                 }
               }
             }
@@ -488,8 +1039,14 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Jika email terdaftar, instruksi reset kata sandi telah dikirimkan." }
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Jika email terdaftar, instruksi reset kata sandi telah dikirimkan."
+                    }
                   }
                 }
               }
@@ -497,15 +1054,22 @@
           },
           "400": {
             "description": "Email tidak disertakan",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
     },
-
     "/api/v1/auth/reset-password": {
       "post": {
-        "tags": ["Auth"],
+        "tags": [
+          "Auth"
+        ],
         "summary": "Reset kata sandi dengan token",
         "description": "Mereset kata sandi menggunakan token dari email. Token berlaku 1 jam. Sesi aktif sebelumnya akan di-revoke.",
         "requestBody": {
@@ -514,10 +1078,20 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["token", "new_password"],
+                "required": [
+                  "token",
+                  "new_password"
+                ],
                 "properties": {
-                  "token": { "type": "string", "example": "a1b2c3d4e5f6..." },
-                  "new_password": { "type": "string", "format": "password", "example": "NewSecurePassword456!" }
+                  "token": {
+                    "type": "string",
+                    "example": "a1b2c3d4e5f6..."
+                  },
+                  "new_password": {
+                    "type": "string",
+                    "format": "password",
+                    "example": "NewSecurePassword456!"
+                  }
                 }
               }
             }
@@ -531,8 +1105,14 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Kata sandi berhasil diperbarui. Silakan login kembali." }
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Kata sandi berhasil diperbarui. Silakan login kembali."
+                    }
                   }
                 }
               }
@@ -540,18 +1120,29 @@
           },
           "400": {
             "description": "Token tidak valid atau kadaluarsa",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
     },
-
     "/api/v1/auth/logout": {
       "post": {
-        "tags": ["Auth"],
+        "tags": [
+          "Auth"
+        ],
         "summary": "Logout dan revoke token JWT",
         "description": "Menambahkan JTI token ke Redis blacklist selama 24 jam. Token yang sudah di-revoke tidak bisa digunakan kembali.",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Logout berhasil, sesi dicabut",
@@ -560,8 +1151,14 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Logout berhasil, sesi telah dicabut" }
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Logout berhasil, sesi telah dicabut"
+                    }
                   }
                 }
               }
@@ -569,18 +1166,29 @@
           },
           "401": {
             "description": "Token tidak valid atau tidak ada",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
     },
-
     "/api/v1/user/profile": {
       "get": {
-        "tags": ["User"],
+        "tags": [
+          "User"
+        ],
         "summary": "Ambil profil pengguna yang sedang login",
         "description": "Mengembalikan data profil lengkap pengguna berdasarkan token JWT.",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Berhasil mengambil data profil",
@@ -589,9 +1197,17 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Berhasil mengambil data profil" },
-                    "data": { "$ref": "#/components/schemas/UserProfile" }
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Berhasil mengambil data profil"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/UserProfile"
+                    }
                   }
                 }
               }
@@ -599,19 +1215,37 @@
           },
           "401": {
             "description": "Tidak terotentikasi",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "404": {
             "description": "Pengguna tidak ditemukan",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       },
       "put": {
-        "tags": ["User"],
+        "tags": [
+          "User"
+        ],
         "summary": "Perbarui profil pengguna",
         "description": "Memperbarui nama, telepon, nama perusahaan, avatar, dan/atau kata sandi. Untuk mengubah kata sandi, `current_password` wajib disertakan.",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -619,12 +1253,32 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "name": { "type": "string", "example": "Nama Baru" },
-                  "phone": { "type": "string", "example": "+6289876543210" },
-                  "company_name": { "type": "string", "example": "PT Baru Sejahtera" },
-                  "avatar_url": { "type": "string", "example": "https://storage.example.com/avatars/new.jpg" },
-                  "current_password": { "type": "string", "format": "password", "example": "OldPassword123" },
-                  "new_password": { "type": "string", "format": "password", "example": "NewPassword456!" }
+                  "name": {
+                    "type": "string",
+                    "example": "Nama Baru"
+                  },
+                  "phone": {
+                    "type": "string",
+                    "example": "+6289876543210"
+                  },
+                  "company_name": {
+                    "type": "string",
+                    "example": "PT Baru Sejahtera"
+                  },
+                  "avatar_url": {
+                    "type": "string",
+                    "example": "https://storage.example.com/avatars/new.jpg"
+                  },
+                  "current_password": {
+                    "type": "string",
+                    "format": "password",
+                    "example": "OldPassword123"
+                  },
+                  "new_password": {
+                    "type": "string",
+                    "format": "password",
+                    "example": "NewPassword456!"
+                  }
                 }
               }
             }
@@ -638,9 +1292,17 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Profil berhasil diperbarui" },
-                    "data": { "$ref": "#/components/schemas/UserProfile" }
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Profil berhasil diperbarui"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/UserProfile"
+                    }
                   }
                 }
               }
@@ -648,19 +1310,32 @@
           },
           "400": {
             "description": "Kata sandi saat ini tidak cocok atau tidak disertakan",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "404": {
             "description": "Pengguna tidak ditemukan",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
     },
-
     "/api/v1/client/chatbot/tree": {
       "get": {
-        "tags": ["Client"],
+        "tags": [
+          "Client"
+        ],
         "summary": "Ambil pohon keputusan chatbot FAQ",
         "description": "Mengembalikan seluruh data FAQ chatbot rule-based. Endpoint ini bersifat publik (tanpa autentikasi). Data di-cache di Redis selama 1 jam.",
         "responses": {
@@ -671,11 +1346,19 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Pohon keputusan chatbot berhasil dimuat" },
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Pohon keputusan chatbot berhasil dimuat"
+                    },
                     "data": {
                       "type": "array",
-                      "items": { "$ref": "#/components/schemas/ChatbotFaq" }
+                      "items": {
+                        "$ref": "#/components/schemas/ChatbotFaq"
+                      }
                     }
                   }
                 }
@@ -685,13 +1368,18 @@
         }
       }
     },
-
     "/api/v1/client/dashboard/overview": {
       "get": {
-        "tags": ["Client"],
+        "tags": [
+          "Client"
+        ],
         "summary": "Ringkasan overview dashboard klien",
         "description": "Menampilkan statistik konsultasi aktif, selesai, dan dokumen terbaru milik klien yang login.",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Statistik konsultasi aktif dan dokumen",
@@ -700,22 +1388,39 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Berhasil memuat ringkasan dashboard klien" },
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Berhasil memuat ringkasan dashboard klien"
+                    },
                     "data": {
                       "type": "object",
                       "properties": {
                         "stats": {
                           "type": "object",
                           "properties": {
-                            "active_consultations": { "type": "integer", "example": 3 },
-                            "completed_consultations": { "type": "integer", "example": 7 },
-                            "total_documents": { "type": "integer", "example": 5 }
+                            "active_consultations": {
+                              "type": "integer",
+                              "example": 3
+                            },
+                            "completed_consultations": {
+                              "type": "integer",
+                              "example": 7
+                            },
+                            "total_documents": {
+                              "type": "integer",
+                              "example": 5
+                            }
                           }
                         },
                         "recent_documents": {
                           "type": "array",
-                          "items": { "$ref": "#/components/schemas/ProjectDocument" }
+                          "items": {
+                            "$ref": "#/components/schemas/ProjectDocument"
+                          }
                         }
                       }
                     }
@@ -726,24 +1431,41 @@
           },
           "401": {
             "description": "Tidak terotentikasi",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
     },
-
     "/api/v1/client/consultations": {
       "get": {
-        "tags": ["Client"],
+        "tags": [
+          "Client"
+        ],
         "summary": "Daftar perikatan konsultasi klien",
         "description": "Menampilkan semua proyek konsultasi milik klien yang login. Bisa difilter berdasarkan status.",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "status",
             "in": "query",
             "description": "Filter berdasarkan status konsultasi",
-            "schema": { "type": "string", "enum": ["IN_PROGRESS", "COMPLETED"] }
+            "schema": {
+              "type": "string",
+              "enum": [
+                "IN_PROGRESS",
+                "COMPLETED"
+              ]
+            }
           }
         ],
         "responses": {
@@ -754,11 +1476,19 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Berhasil memuat daftar perikatan konsultasi" },
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Berhasil memuat daftar perikatan konsultasi"
+                    },
                     "data": {
                       "type": "array",
-                      "items": { "$ref": "#/components/schemas/ConsultationProject" }
+                      "items": {
+                        "$ref": "#/components/schemas/ConsultationProject"
+                      }
                     }
                   }
                 }
@@ -768,20 +1498,28 @@
         }
       }
     },
-
     "/api/v1/client/consultations/{id}": {
       "get": {
-        "tags": ["Client"],
+        "tags": [
+          "Client"
+        ],
         "summary": "Detail konsultasi klien",
         "description": "Menampilkan detail lengkap konsultasi termasuk layanan, task, dan dokumen. Hanya bisa mengakses konsultasi milik sendiri.",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "id",
             "in": "path",
             "required": true,
             "description": "ID konsultasi",
-            "schema": { "type": "integer", "example": 1 }
+            "schema": {
+              "type": "integer",
+              "example": 1
+            }
           }
         ],
         "responses": {
@@ -792,9 +1530,17 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Berhasil memuat detail konsultasi" },
-                    "data": { "$ref": "#/components/schemas/ConsultationProject" }
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Berhasil memuat detail konsultasi"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ConsultationProject"
+                    }
                   }
                 }
               }
@@ -802,18 +1548,29 @@
           },
           "404": {
             "description": "Perikatan konsultasi tidak ditemukan",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
     },
-
     "/api/v1/client/documents": {
       "get": {
-        "tags": ["Client"],
+        "tags": [
+          "Client"
+        ],
         "summary": "Repositori dokumen klien",
         "description": "Menampilkan seluruh dokumen dari semua proyek konsultasi milik klien yang login.",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Berhasil memuat repositori dokumen klien",
@@ -822,11 +1579,19 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Berhasil memuat repositori dokumen klien" },
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Berhasil memuat repositori dokumen klien"
+                    },
                     "data": {
                       "type": "array",
-                      "items": { "$ref": "#/components/schemas/ProjectDocument" }
+                      "items": {
+                        "$ref": "#/components/schemas/ProjectDocument"
+                      }
                     }
                   }
                 }
@@ -836,20 +1601,28 @@
         }
       }
     },
-
     "/api/v1/client/documents/{id}/download": {
       "get": {
-        "tags": ["Client"],
+        "tags": [
+          "Client"
+        ],
         "summary": "Download dokumen via Supabase signed URL",
         "description": "Menghasilkan time-limited signed URL dari Supabase Storage untuk mengunduh dokumen. URL berlaku 1 jam. Hanya bisa mengunduh dokumen dari proyek milik sendiri.",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "id",
             "in": "path",
             "required": true,
             "description": "ID dokumen",
-            "schema": { "type": "integer", "example": 1 }
+            "schema": {
+              "type": "integer",
+              "example": 1
+            }
           }
         ],
         "responses": {
@@ -860,15 +1633,34 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Signed download URL berhasil digenerate" },
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Signed download URL berhasil digenerate"
+                    },
                     "data": {
                       "type": "object",
                       "properties": {
-                        "file_name": { "type": "string", "example": "Laporan_Audit_Q3.pdf" },
-                        "file_type": { "type": "string", "example": "PDF" },
-                        "download_url": { "type": "string", "format": "uri", "example": "https://xyz.supabase.co/storage/v1/object/sign/documents/..." },
-                        "expires_in_seconds": { "type": "integer", "example": 3600 }
+                        "file_name": {
+                          "type": "string",
+                          "example": "Laporan_Audit_Q3.pdf"
+                        },
+                        "file_type": {
+                          "type": "string",
+                          "example": "PDF"
+                        },
+                        "download_url": {
+                          "type": "string",
+                          "format": "uri",
+                          "example": "https://xyz.supabase.co/storage/v1/object/sign/documents/..."
+                        },
+                        "expires_in_seconds": {
+                          "type": "integer",
+                          "example": 3600
+                        }
                       }
                     }
                   }
@@ -878,18 +1670,29 @@
           },
           "404": {
             "description": "Dokumen tidak ditemukan atau tidak memiliki hak akses",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
     },
-
     "/api/v1/client/chatbot/escalate": {
       "post": {
-        "tags": ["Client"],
+        "tags": [
+          "Client"
+        ],
         "summary": "Eskalasi chatbot menjadi tiket konsultasi",
         "description": "Membuat perikatan konsultasi baru dari eskalasi chatbot ketika jawaban FAQ tidak memadai.",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -897,11 +1700,26 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "category": { "type": "string", "example": "Pajak" },
-                  "answered_node": { "type": "string", "example": "FAQ Node #3 - SPT Badan" },
-                  "last_message": { "type": "string", "example": "Saya butuh bantuan lebih lanjut mengenai PPh 21" },
-                  "service_id": { "type": "integer", "example": 1 },
-                  "title": { "type": "string", "example": "Konsultasi PPh 21" }
+                  "category": {
+                    "type": "string",
+                    "example": "Pajak"
+                  },
+                  "answered_node": {
+                    "type": "string",
+                    "example": "FAQ Node #3 - SPT Badan"
+                  },
+                  "last_message": {
+                    "type": "string",
+                    "example": "Saya butuh bantuan lebih lanjut mengenai PPh 21"
+                  },
+                  "service_id": {
+                    "type": "integer",
+                    "example": 1
+                  },
+                  "title": {
+                    "type": "string",
+                    "example": "Konsultasi PPh 21"
+                  }
                 }
               }
             }
@@ -915,9 +1733,17 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Eskalasi chatbot berhasil dibuat menjadi perikatan konsultasi baru" },
-                    "data": { "$ref": "#/components/schemas/ConsultationProject" }
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Eskalasi chatbot berhasil dibuat menjadi perikatan konsultasi baru"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ConsultationProject"
+                    }
                   }
                 }
               }
@@ -925,18 +1751,29 @@
           },
           "401": {
             "description": "Otorisasi gagal",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
     },
-
     "/api/v1/admin/dashboard/overview": {
       "get": {
-        "tags": ["Admin"],
+        "tags": [
+          "Admin"
+        ],
         "summary": "Statistik operasional dashboard admin",
         "description": "Menampilkan ringkasan total konsultasi, konsultasi aktif/selesai, jumlah klien, dan total dokumen.",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Berhasil memuat statistik operasional admin",
@@ -945,16 +1782,37 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Berhasil memuat statistik operasional admin" },
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Berhasil memuat statistik operasional admin"
+                    },
                     "data": {
                       "type": "object",
                       "properties": {
-                        "total_consultations": { "type": "integer", "example": 25 },
-                        "active_consultations": { "type": "integer", "example": 10 },
-                        "completed_consultations": { "type": "integer", "example": 15 },
-                        "total_clients": { "type": "integer", "example": 12 },
-                        "total_documents": { "type": "integer", "example": 45 }
+                        "total_consultations": {
+                          "type": "integer",
+                          "example": 25
+                        },
+                        "active_consultations": {
+                          "type": "integer",
+                          "example": 10
+                        },
+                        "completed_consultations": {
+                          "type": "integer",
+                          "example": 15
+                        },
+                        "total_clients": {
+                          "type": "integer",
+                          "example": 12
+                        },
+                        "total_documents": {
+                          "type": "integer",
+                          "example": 45
+                        }
                       }
                     }
                   }
@@ -964,40 +1822,69 @@
           },
           "401": {
             "description": "Tidak terotentikasi",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "403": {
             "description": "Akses dilarang (bukan ADMIN/SUPERADMIN)",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
     },
-
     "/api/v1/admin/consultations": {
       "get": {
-        "tags": ["Admin"],
+        "tags": [
+          "Admin"
+        ],
         "summary": "Daftar seluruh konsultasi (admin)",
         "description": "Menampilkan daftar seluruh proyek konsultasi dengan filter kategori, status, dan pencarian teks.",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "category",
             "in": "query",
             "description": "Filter berdasarkan kategori layanan",
-            "schema": { "type": "string", "example": "Tax Service" }
+            "schema": {
+              "type": "string",
+              "example": "Tax Service"
+            }
           },
           {
             "name": "status",
             "in": "query",
             "description": "Filter berdasarkan status",
-            "schema": { "type": "string", "enum": ["IN_PROGRESS", "COMPLETED"] }
+            "schema": {
+              "type": "string",
+              "enum": [
+                "IN_PROGRESS",
+                "COMPLETED"
+              ]
+            }
           },
           {
             "name": "search",
             "in": "query",
             "description": "Pencarian berdasarkan judul atau kode proyek",
-            "schema": { "type": "string", "example": "ZHOU-123" }
+            "schema": {
+              "type": "string",
+              "example": "ZHOU-123"
+            }
           }
         ],
         "responses": {
@@ -1008,11 +1895,19 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Berhasil mengambil daftar konsultasi" },
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Berhasil mengambil daftar konsultasi"
+                    },
                     "data": {
                       "type": "array",
-                      "items": { "$ref": "#/components/schemas/ConsultationProject" }
+                      "items": {
+                        "$ref": "#/components/schemas/ConsultationProject"
+                      }
                     }
                   }
                 }
@@ -1022,26 +1917,54 @@
         }
       },
       "post": {
-        "tags": ["Admin"],
+        "tags": [
+          "Admin"
+        ],
         "summary": "Buat perikatan konsultasi baru",
         "description": "Membuat proyek konsultasi baru dengan auto-generated project code. Bisa menyertakan initial_tasks untuk otomatis membuat checklist.",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["client_id", "service_id", "title"],
+                "required": [
+                  "client_id",
+                  "service_id",
+                  "title"
+                ],
                 "properties": {
-                  "client_id": { "type": "integer", "example": 5 },
-                  "service_id": { "type": "integer", "example": 2 },
-                  "title": { "type": "string", "example": "Audit Laporan Keuangan Q3 2026" },
-                  "description": { "type": "string", "example": "Perikatan audit laporan keuangan kuartal 3 tahun fiskal 2026" },
+                  "client_id": {
+                    "type": "integer",
+                    "example": 5
+                  },
+                  "service_id": {
+                    "type": "integer",
+                    "example": 2
+                  },
+                  "title": {
+                    "type": "string",
+                    "example": "Audit Laporan Keuangan Q3 2026"
+                  },
+                  "description": {
+                    "type": "string",
+                    "example": "Perikatan audit laporan keuangan kuartal 3 tahun fiskal 2026"
+                  },
                   "initial_tasks": {
                     "type": "array",
-                    "items": { "type": "string" },
-                    "example": ["Review neraca", "Verifikasi buku besar", "Susun laporan audit"]
+                    "items": {
+                      "type": "string"
+                    },
+                    "example": [
+                      "Review neraca",
+                      "Verifikasi buku besar",
+                      "Susun laporan audit"
+                    ]
                   }
                 }
               }
@@ -1056,9 +1979,17 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Perikatan konsultasi berhasil dibuat" },
-                    "data": { "$ref": "#/components/schemas/ConsultationProject" }
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Perikatan konsultasi berhasil dibuat"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ConsultationProject"
+                    }
                   }
                 }
               }
@@ -1066,25 +1997,39 @@
           },
           "400": {
             "description": "Data konsultasi tidak lengkap",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
     },
-
     "/api/v1/admin/consultations/{id}/status": {
       "patch": {
-        "tags": ["Admin"],
+        "tags": [
+          "Admin"
+        ],
         "summary": "Update status konsultasi",
         "description": "Mengubah status perikatan konsultasi. Jika mengubah ke COMPLETED, semua checklist tugas harus sudah selesai. Perubahan dicatat ke audit log.",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "id",
             "in": "path",
             "required": true,
             "description": "ID konsultasi",
-            "schema": { "type": "integer", "example": 1 }
+            "schema": {
+              "type": "integer",
+              "example": 1
+            }
           }
         ],
         "requestBody": {
@@ -1093,11 +2038,16 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["status"],
+                "required": [
+                  "status"
+                ],
                 "properties": {
                   "status": {
                     "type": "string",
-                    "enum": ["IN_PROGRESS", "COMPLETED"],
+                    "enum": [
+                      "IN_PROGRESS",
+                      "COMPLETED"
+                    ],
                     "example": "COMPLETED"
                   }
                 }
@@ -1113,9 +2063,17 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Status konsultasi berhasil diperbarui dan dicatat ke audit log" },
-                    "data": { "$ref": "#/components/schemas/ConsultationProject" }
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Status konsultasi berhasil diperbarui dan dicatat ke audit log"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ConsultationProject"
+                    }
                   }
                 }
               }
@@ -1123,29 +2081,49 @@
           },
           "400": {
             "description": "Status tidak valid atau checklist belum selesai",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "404": {
             "description": "Proyek konsultasi tidak ditemukan",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
     },
-
     "/api/v1/admin/consultations/{id}/tasks": {
       "post": {
-        "tags": ["Admin"],
+        "tags": [
+          "Admin"
+        ],
         "summary": "Tambah checklist tugas baru",
         "description": "Menambahkan item checklist penugasan baru ke proyek konsultasi.",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "id",
             "in": "path",
             "required": true,
             "description": "ID konsultasi",
-            "schema": { "type": "integer", "example": 1 }
+            "schema": {
+              "type": "integer",
+              "example": 1
+            }
           }
         ],
         "requestBody": {
@@ -1154,9 +2132,14 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["task_name"],
+                "required": [
+                  "task_name"
+                ],
                 "properties": {
-                  "task_name": { "type": "string", "example": "Review laporan neraca" }
+                  "task_name": {
+                    "type": "string",
+                    "example": "Review laporan neraca"
+                  }
                 }
               }
             }
@@ -1170,9 +2153,17 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Checklist tugas baru berhasil ditambahkan" },
-                    "data": { "$ref": "#/components/schemas/ProjectTask" }
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Checklist tugas baru berhasil ditambahkan"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ProjectTask"
+                    }
                   }
                 }
               }
@@ -1180,32 +2171,49 @@
           },
           "400": {
             "description": "Nama tugas tidak diisi",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
     },
-
     "/api/v1/admin/consultations/{id}/tasks/{taskId}": {
       "patch": {
-        "tags": ["Admin"],
+        "tags": [
+          "Admin"
+        ],
         "summary": "Toggle status checklist tugas",
         "description": "Mengubah status selesai/belum selesai dari item checklist tugas.",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "id",
             "in": "path",
             "required": true,
             "description": "ID konsultasi",
-            "schema": { "type": "integer", "example": 1 }
+            "schema": {
+              "type": "integer",
+              "example": 1
+            }
           },
           {
             "name": "taskId",
             "in": "path",
             "required": true,
             "description": "ID task",
-            "schema": { "type": "integer", "example": 3 }
+            "schema": {
+              "type": "integer",
+              "example": 3
+            }
           }
         ],
         "requestBody": {
@@ -1214,9 +2222,14 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["is_completed"],
+                "required": [
+                  "is_completed"
+                ],
                 "properties": {
-                  "is_completed": { "type": "boolean", "example": true }
+                  "is_completed": {
+                    "type": "boolean",
+                    "example": true
+                  }
                 }
               }
             }
@@ -1230,9 +2243,17 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Status checklist berhasil diperbarui" },
-                    "data": { "$ref": "#/components/schemas/ProjectTask" }
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Status checklist berhasil diperbarui"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ProjectTask"
+                    }
                   }
                 }
               }
@@ -1241,20 +2262,28 @@
         }
       }
     },
-
     "/api/v1/admin/consultations/{id}/documents": {
       "post": {
-        "tags": ["Admin"],
+        "tags": [
+          "Admin"
+        ],
         "summary": "Upload dokumen perikatan",
         "description": "Mengunggah dokumen kerja ke proyek konsultasi. Mendukung multipart/form-data upload atau JSON body (file_name + file_path). Dicatat ke audit log.",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "id",
             "in": "path",
             "required": true,
             "description": "ID konsultasi",
-            "schema": { "type": "integer", "example": 1 }
+            "schema": {
+              "type": "integer",
+              "example": 1
+            }
           }
         ],
         "requestBody": {
@@ -1275,12 +2304,32 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["file_name", "file_path"],
+                "required": [
+                  "file_name",
+                  "file_path"
+                ],
                 "properties": {
-                  "file_name": { "type": "string", "example": "Laporan_Audit_Q3_2026.pdf" },
-                  "file_path": { "type": "string", "example": "documents/project-1/Laporan_Audit_Q3_2026.pdf" },
-                  "file_size": { "type": "string", "example": "1.2 MB" },
-                  "file_type": { "type": "string", "enum": ["PDF", "XLSX", "DOCX"], "example": "PDF" }
+                  "file_name": {
+                    "type": "string",
+                    "example": "Laporan_Audit_Q3_2026.pdf"
+                  },
+                  "file_path": {
+                    "type": "string",
+                    "example": "documents/project-1/Laporan_Audit_Q3_2026.pdf"
+                  },
+                  "file_size": {
+                    "type": "string",
+                    "example": "1.2 MB"
+                  },
+                  "file_type": {
+                    "type": "string",
+                    "enum": [
+                      "PDF",
+                      "XLSX",
+                      "DOCX"
+                    ],
+                    "example": "PDF"
+                  }
                 }
               }
             }
@@ -1294,9 +2343,17 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Dokumen perikatan berhasil diunggah" },
-                    "data": { "$ref": "#/components/schemas/ProjectDocument" }
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Dokumen perikatan berhasil diunggah"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ProjectDocument"
+                    }
                   }
                 }
               }
@@ -1304,18 +2361,29 @@
           },
           "400": {
             "description": "Nama berkas dan path tidak diisi",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
     },
-
     "/api/v1/admin/documents": {
       "get": {
-        "tags": ["Admin"],
+        "tags": [
+          "Admin"
+        ],
         "summary": "Repositori dokumen global",
         "description": "Menampilkan seluruh dokumen dari semua proyek konsultasi, termasuk informasi proyek, klien, dan pengunggah.",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Berhasil memuat repositori dokumen global",
@@ -1324,11 +2392,19 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Berhasil memuat repositori dokumen global" },
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Berhasil memuat repositori dokumen global"
+                    },
                     "data": {
                       "type": "array",
-                      "items": { "$ref": "#/components/schemas/ProjectDocument" }
+                      "items": {
+                        "$ref": "#/components/schemas/ProjectDocument"
+                      }
                     }
                   }
                 }
@@ -1338,24 +2414,42 @@
         }
       }
     },
-
     "/api/v1/admin/cms/company-profiles": {
       "put": {
-        "tags": ["CMS Admin"],
+        "tags": [
+          "CMS Admin"
+        ],
         "summary": "Update profil perusahaan (upsert)",
         "description": "Membuat atau memperbarui section profil perusahaan berdasarkan section_key. Menggunakan upsert (buat jika belum ada, update jika sudah ada).",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["section_key", "title", "content"],
+                "required": [
+                  "section_key",
+                  "title",
+                  "content"
+                ],
                 "properties": {
-                  "section_key": { "type": "string", "example": "vision" },
-                  "title": { "type": "string", "example": "Visi Perusahaan" },
-                  "content": { "type": "string", "example": "Menjadi konsultan pajak terpercaya di Indonesia" }
+                  "section_key": {
+                    "type": "string",
+                    "example": "vision"
+                  },
+                  "title": {
+                    "type": "string",
+                    "example": "Visi Perusahaan"
+                  },
+                  "content": {
+                    "type": "string",
+                    "example": "Menjadi konsultan pajak terpercaya di Indonesia"
+                  }
                 }
               }
             }
@@ -1369,9 +2463,17 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Profil perusahaan berhasil disimpan" },
-                    "data": { "$ref": "#/components/schemas/CompanyProfile" }
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Profil perusahaan berhasil disimpan"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/CompanyProfile"
+                    }
                   }
                 }
               }
@@ -1380,25 +2482,46 @@
         }
       }
     },
-
     "/api/v1/admin/cms/services": {
       "post": {
-        "tags": ["CMS Admin"],
+        "tags": [
+          "CMS Admin"
+        ],
         "summary": "Tambah layanan baru",
         "description": "Menambahkan entri layanan konsultasi baru ke katalog.",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["service_code", "service_name", "category"],
+                "required": [
+                  "service_code",
+                  "service_name",
+                  "category"
+                ],
                 "properties": {
-                  "service_code": { "type": "string", "example": "ACC-003" },
-                  "service_name": { "type": "string", "example": "Jasa Bookkeeping" },
-                  "category": { "type": "string", "example": "Accounting Service" },
-                  "description": { "type": "string", "example": "Layanan pembukuan dan pencatatan transaksi keuangan" }
+                  "service_code": {
+                    "type": "string",
+                    "example": "ACC-003"
+                  },
+                  "service_name": {
+                    "type": "string",
+                    "example": "Jasa Bookkeeping"
+                  },
+                  "category": {
+                    "type": "string",
+                    "example": "Accounting Service"
+                  },
+                  "description": {
+                    "type": "string",
+                    "example": "Layanan pembukuan dan pencatatan transaksi keuangan"
+                  }
                 }
               }
             }
@@ -1412,9 +2535,17 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Layanan baru berhasil ditambahkan" },
-                    "data": { "$ref": "#/components/schemas/Service" }
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Layanan baru berhasil ditambahkan"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Service"
+                    }
                   }
                 }
               }
@@ -1423,25 +2554,48 @@
         }
       }
     },
-
     "/api/v1/admin/cms/tax-rates": {
       "post": {
-        "tags": ["CMS Admin"],
+        "tags": [
+          "CMS Admin"
+        ],
         "summary": "Tambah kurs pajak mingguan",
         "description": "Menambahkan data kurs pajak mingguan baru. Cache Redis akan di-invalidasi secara otomatis.",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["currency_code", "rate_value", "effective_start_date"],
+                "required": [
+                  "currency_code",
+                  "rate_value",
+                  "effective_start_date"
+                ],
                 "properties": {
-                  "currency_code": { "type": "string", "example": "USD" },
-                  "rate_value": { "type": "number", "example": 15890.50 },
-                  "effective_start_date": { "type": "string", "format": "date", "example": "2026-09-15" },
-                  "effective_end_date": { "type": "string", "format": "date", "example": "2026-09-21" }
+                  "currency_code": {
+                    "type": "string",
+                    "example": "USD"
+                  },
+                  "rate_value": {
+                    "type": "number",
+                    "example": 15890.5
+                  },
+                  "effective_start_date": {
+                    "type": "string",
+                    "format": "date",
+                    "example": "2026-09-15"
+                  },
+                  "effective_end_date": {
+                    "type": "string",
+                    "format": "date",
+                    "example": "2026-09-21"
+                  }
                 }
               }
             }
@@ -1455,9 +2609,17 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Kurs pajak mingguan berhasil ditambahkan" },
-                    "data": { "$ref": "#/components/schemas/TaxRate" }
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Kurs pajak mingguan berhasil ditambahkan"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/TaxRate"
+                    }
                   }
                 }
               }
@@ -1466,25 +2628,46 @@
         }
       }
     },
-
     "/api/v1/admin/cms/regulations": {
       "post": {
-        "tags": ["CMS Admin"],
+        "tags": [
+          "CMS Admin"
+        ],
         "summary": "Tambah dokumen regulasi",
         "description": "Menambahkan entri dokumen regulasi perpajakan baru.",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["title", "regulation_type", "file_path"],
+                "required": [
+                  "title",
+                  "regulation_type",
+                  "file_path"
+                ],
                 "properties": {
-                  "title": { "type": "string", "example": "PMK No. 66 Tahun 2023 tentang Perlakuan PPh" },
-                  "regulation_type": { "type": "string", "example": "PMK" },
-                  "file_path": { "type": "string", "example": "regulations/pmk-66-2023.pdf" },
-                  "file_size": { "type": "string", "example": "2.5 MB" }
+                  "title": {
+                    "type": "string",
+                    "example": "PMK No. 66 Tahun 2023 tentang Perlakuan PPh"
+                  },
+                  "regulation_type": {
+                    "type": "string",
+                    "example": "PMK"
+                  },
+                  "file_path": {
+                    "type": "string",
+                    "example": "regulations/pmk-66-2023.pdf"
+                  },
+                  "file_size": {
+                    "type": "string",
+                    "example": "2.5 MB"
+                  }
                 }
               }
             }
@@ -1498,9 +2681,17 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Dokumen regulasi berhasil diunggah" },
-                    "data": { "$ref": "#/components/schemas/Regulation" }
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Dokumen regulasi berhasil diunggah"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Regulation"
+                    }
                   }
                 }
               }
@@ -1509,26 +2700,54 @@
         }
       }
     },
-
     "/api/v1/admin/cms/education": {
       "post": {
-        "tags": ["CMS Admin"],
+        "tags": [
+          "CMS Admin"
+        ],
         "summary": "Tambah konten edukasi pajak",
         "description": "Menambahkan artikel atau panduan edukasi pajak baru.",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["title", "category", "body"],
+                "required": [
+                  "title",
+                  "category",
+                  "body"
+                ],
                 "properties": {
-                  "title": { "type": "string", "example": "Panduan Pengisian SPT Tahunan Badan" },
-                  "category": { "type": "string", "example": "Panduan Pajak" },
-                  "content_type": { "type": "string", "enum": ["ARTICLE", "GUIDE"], "example": "GUIDE" },
-                  "body": { "type": "string", "example": "Berikut langkah-langkah pengisian SPT tahunan badan usaha..." },
-                  "file_path": { "type": "string", "example": "education/panduan-spt-badan.pdf" }
+                  "title": {
+                    "type": "string",
+                    "example": "Panduan Pengisian SPT Tahunan Badan"
+                  },
+                  "category": {
+                    "type": "string",
+                    "example": "Panduan Pajak"
+                  },
+                  "content_type": {
+                    "type": "string",
+                    "enum": [
+                      "ARTICLE",
+                      "GUIDE"
+                    ],
+                    "example": "GUIDE"
+                  },
+                  "body": {
+                    "type": "string",
+                    "example": "Berikut langkah-langkah pengisian SPT tahunan badan usaha..."
+                  },
+                  "file_path": {
+                    "type": "string",
+                    "example": "education/panduan-spt-badan.pdf"
+                  }
                 }
               }
             }
@@ -1542,9 +2761,17 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Konten edukasi berhasil dipublikasikan" },
-                    "data": { "$ref": "#/components/schemas/EducationContent" }
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Konten edukasi berhasil dipublikasikan"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/EducationContent"
+                    }
                   }
                 }
               }
@@ -1553,26 +2780,52 @@
         }
       }
     },
-
     "/api/v1/admin/cms/careers": {
       "post": {
-        "tags": ["CMS Admin"],
+        "tags": [
+          "CMS Admin"
+        ],
         "summary": "Tambah lowongan kerja baru",
         "description": "Menambahkan lowongan kerja baru ke halaman karir.",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["position_code", "position_title", "level", "location", "description"],
+                "required": [
+                  "position_code",
+                  "position_title",
+                  "level",
+                  "location",
+                  "description"
+                ],
                 "properties": {
-                  "position_code": { "type": "string", "example": "TAX-SR-002" },
-                  "position_title": { "type": "string", "example": "Tax Compliance Manager" },
-                  "level": { "type": "string", "example": "Manager" },
-                  "location": { "type": "string", "example": "Jakarta Pusat" },
-                  "description": { "type": "string", "example": "Bertanggung jawab atas kepatuhan pajak klien korporasi besar" }
+                  "position_code": {
+                    "type": "string",
+                    "example": "TAX-SR-002"
+                  },
+                  "position_title": {
+                    "type": "string",
+                    "example": "Tax Compliance Manager"
+                  },
+                  "level": {
+                    "type": "string",
+                    "example": "Manager"
+                  },
+                  "location": {
+                    "type": "string",
+                    "example": "Jakarta Pusat"
+                  },
+                  "description": {
+                    "type": "string",
+                    "example": "Bertanggung jawab atas kepatuhan pajak klien korporasi besar"
+                  }
                 }
               }
             }
@@ -1586,37 +2839,16 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Lowongan kerja berhasil ditambahkan" },
-                    "data": { "$ref": "#/components/schemas/CareerJob" }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-
-    "/api/v1/admin/cms/job-applications": {
-      "get": {
-        "tags": ["CMS Admin"],
-        "summary": "Daftar lamaran kerja pelamar",
-        "description": "Menampilkan seluruh lamaran yang masuk beserta info posisi yang dilamar.",
-        "security": [{ "BearerAuth": [] }],
-        "responses": {
-          "200": {
-            "description": "Berhasil memuat daftar lamaran pelamar",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Berhasil memuat daftar lamaran pelamar" },
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Lowongan kerja berhasil ditambahkan"
+                    },
                     "data": {
-                      "type": "array",
-                      "items": { "$ref": "#/components/schemas/JobApplication" }
+                      "$ref": "#/components/schemas/CareerJob"
                     }
                   }
                 }
@@ -1626,10 +2858,53 @@
         }
       }
     },
-
+    "/api/v1/admin/cms/job-applications": {
+      "get": {
+        "tags": [
+          "CMS Admin"
+        ],
+        "summary": "Daftar lamaran kerja pelamar",
+        "description": "Menampilkan seluruh lamaran yang masuk beserta info posisi yang dilamar.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Berhasil memuat daftar lamaran pelamar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Berhasil memuat daftar lamaran pelamar"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/JobApplication"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/public/company-profiles": {
       "get": {
-        "tags": ["Public CMS"],
+        "tags": [
+          "Public CMS"
+        ],
         "summary": "Profil perusahaan publik",
         "description": "Menampilkan seluruh section profil perusahaan (visi, misi, sejarah, dll).",
         "responses": {
@@ -1640,11 +2915,19 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Berhasil memuat profil perusahaan" },
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Berhasil memuat profil perusahaan"
+                    },
                     "data": {
                       "type": "array",
-                      "items": { "$ref": "#/components/schemas/CompanyProfile" }
+                      "items": {
+                        "$ref": "#/components/schemas/CompanyProfile"
+                      }
                     }
                   }
                 }
@@ -1654,10 +2937,11 @@
         }
       }
     },
-
     "/api/v1/public/services": {
       "get": {
-        "tags": ["Public CMS"],
+        "tags": [
+          "Public CMS"
+        ],
         "summary": "Katalog layanan publik",
         "description": "Menampilkan daftar layanan konsultasi yang aktif.",
         "responses": {
@@ -1668,11 +2952,19 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Berhasil memuat katalog layanan" },
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Berhasil memuat katalog layanan"
+                    },
                     "data": {
                       "type": "array",
-                      "items": { "$ref": "#/components/schemas/Service" }
+                      "items": {
+                        "$ref": "#/components/schemas/Service"
+                      }
                     }
                   }
                 }
@@ -1682,10 +2974,11 @@
         }
       }
     },
-
     "/api/v1/public/tax-rates/latest": {
       "get": {
-        "tags": ["Public CMS"],
+        "tags": [
+          "Public CMS"
+        ],
         "summary": "Kurs pajak mingguan terbaru",
         "description": "Menampilkan 20 data kurs pajak terbaru. Data di-cache di Redis selama 30 menit.",
         "responses": {
@@ -1696,11 +2989,19 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Kurs pajak mingguan berhasil dimuat" },
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Kurs pajak mingguan berhasil dimuat"
+                    },
                     "data": {
                       "type": "array",
-                      "items": { "$ref": "#/components/schemas/TaxRate" }
+                      "items": {
+                        "$ref": "#/components/schemas/TaxRate"
+                      }
                     }
                   }
                 }
@@ -1710,10 +3011,11 @@
         }
       }
     },
-
     "/api/v1/public/regulations": {
       "get": {
-        "tags": ["Public CMS"],
+        "tags": [
+          "Public CMS"
+        ],
         "summary": "Daftar regulasi perpajakan",
         "description": "Menampilkan seluruh dokumen regulasi perpajakan.",
         "responses": {
@@ -1724,11 +3026,19 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Berhasil memuat daftar regulasi perpajakan" },
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Berhasil memuat daftar regulasi perpajakan"
+                    },
                     "data": {
                       "type": "array",
-                      "items": { "$ref": "#/components/schemas/Regulation" }
+                      "items": {
+                        "$ref": "#/components/schemas/Regulation"
+                      }
                     }
                   }
                 }
@@ -1738,10 +3048,11 @@
         }
       }
     },
-
     "/api/v1/public/education": {
       "get": {
-        "tags": ["Public CMS"],
+        "tags": [
+          "Public CMS"
+        ],
         "summary": "Materi edukasi pajak",
         "description": "Menampilkan seluruh konten edukasi dan panduan perpajakan.",
         "responses": {
@@ -1752,11 +3063,19 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Berhasil memuat materi edukasi pajak" },
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Berhasil memuat materi edukasi pajak"
+                    },
                     "data": {
                       "type": "array",
-                      "items": { "$ref": "#/components/schemas/EducationContent" }
+                      "items": {
+                        "$ref": "#/components/schemas/EducationContent"
+                      }
                     }
                   }
                 }
@@ -1766,10 +3085,11 @@
         }
       }
     },
-
     "/api/v1/public/careers": {
       "get": {
-        "tags": ["Public CMS"],
+        "tags": [
+          "Public CMS"
+        ],
         "summary": "Lowongan karir aktif",
         "description": "Menampilkan seluruh lowongan kerja yang masih aktif.",
         "responses": {
@@ -1780,11 +3100,19 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Berhasil memuat lowongan karir" },
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Berhasil memuat lowongan karir"
+                    },
                     "data": {
                       "type": "array",
-                      "items": { "$ref": "#/components/schemas/CareerJob" }
+                      "items": {
+                        "$ref": "#/components/schemas/CareerJob"
+                      }
                     }
                   }
                 }
@@ -1794,10 +3122,11 @@
         }
       }
     },
-
     "/api/v1/public/careers/{id}/apply": {
       "post": {
-        "tags": ["Public CMS"],
+        "tags": [
+          "Public CMS"
+        ],
         "summary": "Melamar lowongan kerja",
         "description": "Mengirimkan lamaran kerja untuk posisi tertentu. Email konfirmasi akan dikirim secara otomatis via Resend.",
         "parameters": [
@@ -1806,7 +3135,10 @@
             "in": "path",
             "required": true,
             "description": "ID lowongan kerja",
-            "schema": { "type": "integer", "example": 1 }
+            "schema": {
+              "type": "integer",
+              "example": 1
+            }
           }
         ],
         "requestBody": {
@@ -1815,12 +3147,29 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["applicant_name", "applicant_email", "cv_file_path"],
+                "required": [
+                  "applicant_name",
+                  "applicant_email",
+                  "cv_file_path"
+                ],
                 "properties": {
-                  "applicant_name": { "type": "string", "example": "Budi Santoso" },
-                  "applicant_email": { "type": "string", "format": "email", "example": "budi@email.com" },
-                  "applicant_phone": { "type": "string", "example": "+6281234567890" },
-                  "cv_file_path": { "type": "string", "example": "careers/cv-budi-santoso.pdf" }
+                  "applicant_name": {
+                    "type": "string",
+                    "example": "Budi Santoso"
+                  },
+                  "applicant_email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "budi@email.com"
+                  },
+                  "applicant_phone": {
+                    "type": "string",
+                    "example": "+6281234567890"
+                  },
+                  "cv_file_path": {
+                    "type": "string",
+                    "example": "careers/cv-budi-santoso.pdf"
+                  }
                 }
               }
             }
@@ -1834,9 +3183,17 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Lamaran kerja berhasil dikirimkan dan konfirmasi telah dikirim via email" },
-                    "data": { "$ref": "#/components/schemas/JobApplication" }
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Lamaran kerja berhasil dikirimkan dan konfirmasi telah dikirim via email"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/JobApplication"
+                    }
                   }
                 }
               }
@@ -1844,15 +3201,22 @@
           },
           "400": {
             "description": "Data biodata dan file CV wajib diisi",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
     },
-
     "/api/v1/public/settings/contact": {
       "get": {
-        "tags": ["Public CMS"],
+        "tags": [
+          "Public CMS"
+        ],
         "summary": "Informasi kontak & pengaturan situs",
         "description": "Menampilkan pengaturan kontak customer service (nomor WhatsApp, email, jam operasional, dll).",
         "responses": {
@@ -1863,11 +3227,19 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Berhasil memuat informasi kontak & pengaturan" },
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Berhasil memuat informasi kontak & pengaturan"
+                    },
                     "data": {
                       "type": "array",
-                      "items": { "$ref": "#/components/schemas/SiteSetting" }
+                      "items": {
+                        "$ref": "#/components/schemas/SiteSetting"
+                      }
                     }
                   }
                 }
@@ -1877,10 +3249,11 @@
         }
       }
     },
-
     "/api/v1/public/contact": {
       "post": {
-        "tags": ["Public CMS"],
+        "tags": [
+          "Public CMS"
+        ],
         "summary": "Kirim pesan kontak",
         "description": "Mengirimkan pesan pertanyaan ke customer service Zhou Consulting.",
         "requestBody": {
@@ -1889,11 +3262,25 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["name", "email", "message"],
+                "required": [
+                  "name",
+                  "email",
+                  "message"
+                ],
                 "properties": {
-                  "name": { "type": "string", "example": "Ahmad Fauzi" },
-                  "email": { "type": "string", "format": "email", "example": "ahmad@email.com" },
-                  "message": { "type": "string", "example": "Saya ingin bertanya mengenai layanan konsultasi pajak tahunan" }
+                  "name": {
+                    "type": "string",
+                    "example": "Ahmad Fauzi"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "ahmad@email.com"
+                  },
+                  "message": {
+                    "type": "string",
+                    "example": "Saya ingin bertanya mengenai layanan konsultasi pajak tahunan"
+                  }
                 }
               }
             }
@@ -1907,13 +3294,25 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Pesan pertanyaan Anda telah terkirim ke customer service kami" },
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Pesan pertanyaan Anda telah terkirim ke customer service kami"
+                    },
                     "data": {
                       "type": "object",
                       "properties": {
-                        "received_at": { "type": "string", "format": "date-time" },
-                        "status": { "type": "string", "example": "SENT" }
+                        "received_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "status": {
+                          "type": "string",
+                          "example": "SENT"
+                        }
                       }
                     }
                   }
@@ -1923,18 +3322,29 @@
           },
           "400": {
             "description": "Nama, email, dan pesan wajib diisi",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
     },
-
     "/api/v1/superadmin/admins": {
       "get": {
-        "tags": ["Superadmin"],
+        "tags": [
+          "Superadmin"
+        ],
         "summary": "Daftar akun staf admin",
         "description": "Menampilkan seluruh akun dengan role ADMIN dan SUPERADMIN.",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Berhasil memuat daftar akun staf admin",
@@ -1943,11 +3353,19 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Berhasil memuat daftar akun staf admin" },
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Berhasil memuat daftar akun staf admin"
+                    },
                     "data": {
                       "type": "array",
-                      "items": { "$ref": "#/components/schemas/AdminUser" }
+                      "items": {
+                        "$ref": "#/components/schemas/AdminUser"
+                      }
                     }
                   }
                 }
@@ -1956,32 +3374,75 @@
           },
           "401": {
             "description": "Tidak terotentikasi",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "403": {
             "description": "Akses dilarang (bukan SUPERADMIN)",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       },
       "post": {
-        "tags": ["Superadmin"],
+        "tags": [
+          "Superadmin"
+        ],
         "summary": "Buat akun staf admin baru",
         "description": "Membuat akun admin baru dan mengirimkan kredensial awal via email Resend. Tindakan dicatat ke audit log.",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["name", "email", "password"],
+                "required": [
+                  "name",
+                  "email",
+                  "password"
+                ],
                 "properties": {
-                  "name": { "type": "string", "example": "Staff Baru" },
-                  "email": { "type": "string", "format": "email", "example": "staffbaru@zhouconsulting.com" },
-                  "password": { "type": "string", "format": "password", "example": "TempPassword123!" },
-                  "role": { "type": "string", "enum": ["ADMIN", "SUPERADMIN"], "example": "ADMIN" },
-                  "phone": { "type": "string", "example": "+6281234567890" }
+                  "name": {
+                    "type": "string",
+                    "example": "Staff Baru"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "staffbaru@zhouconsulting.com"
+                  },
+                  "password": {
+                    "type": "string",
+                    "format": "password",
+                    "example": "TempPassword123!"
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "ADMIN",
+                      "SUPERADMIN"
+                    ],
+                    "example": "ADMIN"
+                  },
+                  "phone": {
+                    "type": "string",
+                    "example": "+6281234567890"
+                  }
                 }
               }
             }
@@ -1995,9 +3456,17 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Akun staf admin berhasil dibuat dan kredensial dikirimkan via email" },
-                    "data": { "$ref": "#/components/schemas/AdminUser" }
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Akun staf admin berhasil dibuat dan kredensial dikirimkan via email"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AdminUser"
+                    }
                   }
                 }
               }
@@ -2005,29 +3474,49 @@
           },
           "400": {
             "description": "Data admin tidak lengkap",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "409": {
             "description": "Email staf telah terdaftar",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
     },
-
     "/api/v1/superadmin/admins/{id}/deactivate": {
       "post": {
-        "tags": ["Superadmin"],
+        "tags": [
+          "Superadmin"
+        ],
         "summary": "Nonaktifkan akun staf admin",
         "description": "Menonaktifkan akun admin dan mencabut seluruh sesi token aktif via Redis. Tidak bisa menonaktifkan akun sendiri. Dicatat ke audit log.",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "id",
             "in": "path",
             "required": true,
             "description": "ID akun admin yang akan dinonaktifkan",
-            "schema": { "type": "integer", "example": 3 }
+            "schema": {
+              "type": "integer",
+              "example": 3
+            }
           }
         ],
         "responses": {
@@ -2038,14 +3527,29 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Akses staf berhasil dinonaktifkan seketika dan token dicabut" },
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Akses staf berhasil dinonaktifkan seketika dan token dicabut"
+                    },
                     "data": {
                       "type": "object",
                       "properties": {
-                        "id": { "type": "integer", "example": 3 },
-                        "email": { "type": "string", "example": "staff@zhouconsulting.com" },
-                        "is_active": { "type": "boolean", "example": false }
+                        "id": {
+                          "type": "integer",
+                          "example": 3
+                        },
+                        "email": {
+                          "type": "string",
+                          "example": "staff@zhouconsulting.com"
+                        },
+                        "is_active": {
+                          "type": "boolean",
+                          "example": false
+                        }
                       }
                     }
                   }
@@ -2055,25 +3559,39 @@
           },
           "400": {
             "description": "Tidak dapat menonaktifkan akun sendiri",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
     },
-
     "/api/v1/superadmin/admins/{id}": {
       "delete": {
-        "tags": ["Superadmin"],
+        "tags": [
+          "Superadmin"
+        ],
         "summary": "Hapus permanen akun admin",
         "description": "Menghapus akun admin secara permanen. Hanya bisa dilakukan jika admin tidak memiliki riwayat pekerjaan/audit trail. Jika ada riwayat, gunakan nonaktifkan (soft delete) saja.",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "id",
             "in": "path",
             "required": true,
             "description": "ID akun admin yang akan dihapus",
-            "schema": { "type": "integer", "example": 4 }
+            "schema": {
+              "type": "integer",
+              "example": 4
+            }
           }
         ],
         "responses": {
@@ -2084,8 +3602,14 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Akun staf tanpa riwayat berhasil dihapus permanen" }
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Akun staf tanpa riwayat berhasil dihapus permanen"
+                    }
                   }
                 }
               }
@@ -2093,54 +3617,88 @@
           },
           "400": {
             "description": "Tidak bisa menghapus akun sendiri / akun memiliki riwayat audit trail",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
     },
-
     "/api/v1/superadmin/audit-logs": {
       "get": {
-        "tags": ["Superadmin"],
+        "tags": [
+          "Superadmin"
+        ],
         "summary": "Riwayat log audit",
         "description": "Menampilkan log audit dengan filter opsional berdasarkan admin, klien, proyek, aksi, dan rentang tanggal. Maksimal 100 entri.",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "admin_id",
             "in": "query",
             "description": "Filter berdasarkan ID admin",
-            "schema": { "type": "integer" }
+            "schema": {
+              "type": "integer"
+            }
           },
           {
             "name": "client_id",
             "in": "query",
             "description": "Filter berdasarkan ID klien",
-            "schema": { "type": "integer" }
+            "schema": {
+              "type": "integer"
+            }
           },
           {
             "name": "project_id",
             "in": "query",
             "description": "Filter berdasarkan ID proyek konsultasi",
-            "schema": { "type": "integer" }
+            "schema": {
+              "type": "integer"
+            }
           },
           {
             "name": "action",
             "in": "query",
             "description": "Filter berdasarkan tipe aksi",
-            "schema": { "type": "string", "enum": ["STATUS_UPDATE", "DOCUMENT_UPLOAD", "ADMIN_CREATE", "ADMIN_DEACTIVATE", "ADMIN_DELETE_PERMANENT"] }
+            "schema": {
+              "type": "string",
+              "enum": [
+                "STATUS_UPDATE",
+                "DOCUMENT_UPLOAD",
+                "ADMIN_CREATE",
+                "ADMIN_DEACTIVATE",
+                "ADMIN_DELETE_PERMANENT"
+              ]
+            }
           },
           {
             "name": "start_date",
             "in": "query",
             "description": "Filter tanggal mulai (ISO 8601)",
-            "schema": { "type": "string", "format": "date", "example": "2026-01-01" }
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "example": "2026-01-01"
+            }
           },
           {
             "name": "end_date",
             "in": "query",
             "description": "Filter tanggal akhir (ISO 8601)",
-            "schema": { "type": "string", "format": "date", "example": "2026-12-31" }
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "example": "2026-12-31"
+            }
           }
         ],
         "responses": {
@@ -2151,11 +3709,19 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Berhasil memuat riwayat log audit" },
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Berhasil memuat riwayat log audit"
+                    },
                     "data": {
                       "type": "array",
-                      "items": { "$ref": "#/components/schemas/AuditLog" }
+                      "items": {
+                        "$ref": "#/components/schemas/AuditLog"
+                      }
                     }
                   }
                 }
@@ -2165,13 +3731,18 @@
         }
       }
     },
-
     "/api/v1/superadmin/audit-logs/export": {
       "get": {
-        "tags": ["Superadmin"],
+        "tags": [
+          "Superadmin"
+        ],
         "summary": "Ekspor data log audit",
         "description": "Mengekspor seluruh data audit log dalam format yang siap diunduh/diproses (format flat JSON).",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Data log audit siap diekspor",
@@ -2180,22 +3751,55 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Data log audit siap diekspor" },
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Data log audit siap diekspor"
+                    },
                     "data": {
                       "type": "array",
                       "items": {
                         "type": "object",
                         "properties": {
-                          "id": { "type": "integer", "example": 1 },
-                          "timestamp": { "type": "string", "format": "date-time" },
-                          "admin": { "type": "string", "example": "Admin Zhou" },
-                          "klien": { "type": "string", "example": "PT Citra Sejahtera" },
-                          "tiket": { "type": "string", "example": "ZHOU-123456" },
-                          "status_sebelum": { "type": "string", "example": "IN_PROGRESS" },
-                          "status_sesudah": { "type": "string", "example": "COMPLETED" },
-                          "file": { "type": "string", "example": "laporan.pdf" },
-                          "deskripsi": { "type": "string", "example": "Perubahan status perikatan" }
+                          "id": {
+                            "type": "integer",
+                            "example": 1
+                          },
+                          "timestamp": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "admin": {
+                            "type": "string",
+                            "example": "Admin Zhou"
+                          },
+                          "klien": {
+                            "type": "string",
+                            "example": "PT Citra Sejahtera"
+                          },
+                          "tiket": {
+                            "type": "string",
+                            "example": "ZHOU-123456"
+                          },
+                          "status_sebelum": {
+                            "type": "string",
+                            "example": "IN_PROGRESS"
+                          },
+                          "status_sesudah": {
+                            "type": "string",
+                            "example": "COMPLETED"
+                          },
+                          "file": {
+                            "type": "string",
+                            "example": "laporan.pdf"
+                          },
+                          "deskripsi": {
+                            "type": "string",
+                            "example": "Perubahan status perikatan"
+                          }
                         }
                       }
                     }
