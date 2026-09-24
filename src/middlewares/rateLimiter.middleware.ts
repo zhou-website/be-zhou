@@ -5,7 +5,7 @@ import { redis } from '../config/redis.js';
 // Rate Limiter khusus endpoint login & otentikasi untuk mencegah serangan brute-force
 export const authRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 menit
-  limit: process.env.NODE_ENV === 'production' ? 10 : 1000, // Longgar di development, ketat di production
+  limit: process.env.NODE_ENV === 'production' ? 100 : 1000, // Ditingkatkan ke 100 agar QA testing tidak terblokir
   skip: (req) => {
     if (process.env.NODE_ENV === 'test' || process.env.SKIP_RATE_LIMIT === 'true') return true;
     // Di lingkungan lokal development, jangan batasi localhost agar pengetesan lancar
@@ -28,7 +28,7 @@ export const authRateLimiter = rateLimit({
 // Rate Limiter umum untuk seluruh rute API
 export const apiRateLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 menit
-  limit: process.env.NODE_ENV === 'production' ? 100 : 10000,
+  limit: process.env.NODE_ENV === 'production' ? 500 : 10000, // Ditingkatkan ke 500 agar load/QA testing lancar
   skip: (req) => {
     if (process.env.NODE_ENV === 'test' || process.env.SKIP_RATE_LIMIT === 'true') return true;
     if (process.env.NODE_ENV !== 'production') return true;
