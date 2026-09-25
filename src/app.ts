@@ -49,9 +49,14 @@ app.use((req, res, next) => {
   return helmetMiddleware(req, res, next);
 });
 
-// Comprehensive CORS configuration with origin whitelist (Vercel frontend, localhost, domain)
+// Comprehensive CORS configuration with origin whitelist (Server IP, Vercel frontend, localhost, domain)
 const allowedOrigins = [
   process.env.FRONTEND_URL,
+  'http://43.173.2.162',
+  'https://43.173.2.162',
+  'http://43.173.2.162:5000',
+  'http://43.173.2.162.sslip.io',
+  'https://43.173.2.162.sslip.io',
   'https://zhouconsulting.com',
   'https://api.zhouconsulting.com',
   'http://localhost:3000',
@@ -70,12 +75,14 @@ app.use(
       // Mengizinkan request tanpa origin (seperti Postman, cURL, automated tests, mobile apps)
       if (!origin) return callback(null, true);
 
-      // Cek apakah origin ada di daftar allowedOrigins atau subdomain vercel.app / zhouconsulting.com
+      // Cek apakah origin ada di daftar allowedOrigins atau pattern regex (Server IP, sslip.io, vercel.app, zhouconsulting.com)
       const isExplicitlyAllowed = allowedOrigins.includes(origin);
-      const isVercelDeploy = /^https:\/\/[a-zA-Z0-9_-]+\.vercel\.app$/.test(origin);
-      const isZhouDomain = /^https:\/\/[a-zA-Z0-9_-]+\.zhouconsulting\.com$/.test(origin);
+      const isServerIp = /^https?:\/\/43\.173\.2\.162(:[0-9]+)?$/.test(origin);
+      const isSslip = /^https?:\/\/[a-zA-Z0-9_.-]*sslip\.io(:[0-9]+)?$/.test(origin);
+      const isVercelDeploy = /^https:\/\/[a-zA-Z0-9_.-]+\.vercel\.app$/.test(origin);
+      const isZhouDomain = /^https:\/\/[a-zA-Z0-9_.-]+\.zhouconsulting\.com$/.test(origin);
 
-      if (isExplicitlyAllowed || isVercelDeploy || isZhouDomain) {
+      if (isExplicitlyAllowed || isServerIp || isSslip || isVercelDeploy || isZhouDomain) {
         return callback(null, true);
       }
 
