@@ -8,8 +8,8 @@ import { sendSuccess, sendError } from '../utils/response.js';
 import { sendPasswordResetEmail } from '../services/email.service.js';
 
 import { OAuth2Client } from 'google-auth-library';
+import { JWT_SECRET } from '../config/jwt.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'zhou_consulting_jwt_secret_dev_key_2026';
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const googleClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
 

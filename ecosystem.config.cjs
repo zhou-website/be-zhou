@@ -2,6 +2,7 @@ module.exports = {
   apps: [
     {
       name: 'zhou-backend',
+      cwd: '/var/www/be-zhou',
       script: './dist/src/server.js',
       instances: 'max', // Memanfaatkan 2 vCPU Biznet Gio
       exec_mode: 'cluster',

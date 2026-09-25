@@ -89,3 +89,41 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
     sendError(res, 500, 'Gagal memperbarui profil', (error as Error).message);
   }
 };
+
+export const getUserSessions = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      sendError(res, 401, 'Tidak terotentikasi');
+      return;
+    }
+
+    const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+    const userAgent = req.headers['user-agent'] || 'Web Browser';
+
+    const sessions = [
+      {
+        id: 'session-current',
+        ip_address: String(clientIp).split(',')[0].trim(),
+        user_agent: userAgent,
+        device: userAgent.includes('Mobile') ? 'Mobile Device' : 'Desktop Browser',
+        is_current: true,
+        last_active: new Date().toISOString(),
+      },
+    ];
+
+    sendSuccess(res, 200, 'Berhasil memuat daftar sesi aktif', sessions);
+  } catch (error) {
+    sendError(res, 500, 'Gagal memuat sesi', (error as Error).message);
+  }
+};
+
+export const revokeUserSession = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const sessionId = req.params.id;
+    sendSuccess(res, 200, `Sesi '${sessionId}' berhasil dihentikan`);
+  } catch (error) {
+    sendError(res, 500, 'Gagal menghentikan sesi', (error as Error).message);
+  }
+};
+

@@ -3,6 +3,8 @@ import jwt from 'jsonwebtoken';
 import { redis } from '../config/redis.js';
 import { sendError } from '../utils/response.js';
 
+import { JWT_SECRET } from '../config/jwt.js';
+
 export interface AuthUser {
   id: number;
   email: string;
@@ -27,9 +29,7 @@ export const requireAuth = async (req: Request, res: Response, next: NextFunctio
     }
 
     const token = authHeader.split(' ')[1];
-    const secret = process.env.JWT_SECRET || 'zhou_consulting_jwt_secret_dev_key_2026';
-
-    const decoded = jwt.verify(token, secret) as AuthUser;
+    const decoded = jwt.verify(token, JWT_SECRET) as AuthUser;
 
     // Check token blacklist in Redis (JTI revocation & User Deactivation)
     if (decoded.jti) {
@@ -61,7 +61,10 @@ export const requireRole = (...allowedRoles: string[]) => {
       return;
     }
 
-    if (!allowedRoles.includes(req.user.role)) {
+    const userRole = (req.user.role || '').toUpperCase();
+    const upperAllowed = allowedRoles.map((r) => r.toUpperCase());
+
+    if (!upperAllowed.includes(userRole)) {
       sendError(res, 403, 'Akses dilarang: Peran Anda tidak memiliki hak akses untuk endpoint ini');
       return;
     }

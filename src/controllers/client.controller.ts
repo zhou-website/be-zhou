@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { prisma } from '../config/database.js';
 import { redis } from '../config/redis.js';
 import { sendSuccess, sendError } from '../utils/response.js';
-import { getSignedDownloadUrl } from '../services/storage.service.js';
+import { getSignedDownloadUrl, uploadFileToStorage } from '../services/storage.service.js';
 
 export const getDashboardOverview = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -239,3 +239,66 @@ Pesan Klien: ${last_message || '-'}`;
     sendError(res, 500, 'Gagal melakukan eskalasi tiket chatbot', (error as Error).message);
   }
 };
+
+export const uploadClientDocument = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const clientId = req.user?.id;
+    const projectId = parseInt(String(req.params.id), 10);
+    const body = req.body || {};
+
+    if (!clientId) {
+      sendError(res, 401, 'Tidak terotentikasi');
+      return;
+    }
+
+    // Pastikan tiket perikatan memang milik klien tersebut (kecuali admin/superadmin)
+    const userRole = (req.user?.role || '').toUpperCase();
+    const isElevated = userRole === 'ADMIN' || userRole === 'SUPERADMIN';
+    const project = await prisma.consultationProject.findFirst({
+      where: isElevated ? { id: projectId } : { id: projectId, client_id: clientId },
+    });
+
+    if (!project) {
+      sendError(res, 404, 'Tiket konsultasi tidak ditemukan atau Anda tidak memiliki akses');
+      return;
+    }
+
+    let fileName = body.file_name;
+    let filePath = body.file_path;
+    let fileSize = body.file_size || '0 KB';
+    let fileType = body.file_type || 'PDF';
+
+    if (req.file) {
+      fileName = req.file.originalname;
+      fileSize = `${(req.file.size / 1024).toFixed(1)} KB`;
+      fileType = req.file.mimetype.includes('pdf')
+        ? 'PDF'
+        : req.file.mimetype.includes('spreadsheet') || req.file.mimetype.includes('excel')
+        ? 'XLSX'
+        : 'DOCX';
+      const uploadResult = await uploadFileToStorage(fileName, req.file.buffer, req.file.mimetype);
+      filePath = uploadResult.filePath;
+    }
+
+    if (!fileName || !filePath) {
+      sendError(res, 400, 'Nama berkas dan berkas upload wajib disertakan');
+      return;
+    }
+
+    const doc = await prisma.projectDocument.create({
+      data: {
+        project_id: projectId,
+        file_name: fileName,
+        file_path: filePath,
+        file_size: fileSize,
+        file_type: fileType,
+        uploaded_by: clientId,
+      },
+    });
+
+    sendSuccess(res, 201, 'Dokumen berhasil diunggah oleh klien', doc);
+  } catch (error) {
+    sendError(res, 500, 'Gagal mengunggah dokumen klien', (error as Error).message);
+  }
+};
+

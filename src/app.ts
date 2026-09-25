@@ -49,9 +49,11 @@ app.use((req, res, next) => {
   return helmetMiddleware(req, res, next);
 });
 
-// Comprehensive CORS configuration for frontend testing, PM evaluation, and production
+// Comprehensive CORS configuration with origin whitelist (Vercel frontend, localhost, domain)
 const allowedOrigins = [
   process.env.FRONTEND_URL,
+  'https://zhouconsulting.com',
+  'https://api.zhouconsulting.com',
   'http://localhost:3000',
   'http://localhost:3001',
   'http://localhost:5173',
@@ -68,9 +70,21 @@ app.use(
       // Mengizinkan request tanpa origin (seperti Postman, cURL, automated tests, mobile apps)
       if (!origin) return callback(null, true);
 
-      // Selama fase pengujian & deployment, izinkan seluruh origin dan pantulkan kembali
-      // agar credentials: true berfungsi sempurna tanpa kendala origin mismatch
-      return callback(null, true);
+      // Cek apakah origin ada di daftar allowedOrigins atau subdomain vercel.app / zhouconsulting.com
+      const isExplicitlyAllowed = allowedOrigins.includes(origin);
+      const isVercelDeploy = /^https:\/\/[a-zA-Z0-9_-]+\.vercel\.app$/.test(origin);
+      const isZhouDomain = /^https:\/\/[a-zA-Z0-9_-]+\.zhouconsulting\.com$/.test(origin);
+
+      if (isExplicitlyAllowed || isVercelDeploy || isZhouDomain) {
+        return callback(null, true);
+      }
+
+      // Di mode development, toleransi origin lokal lainnya
+      if (process.env.NODE_ENV !== 'production' && (origin.includes('localhost') || origin.includes('127.0.0.1'))) {
+        return callback(null, true);
+      }
+
+      return callback(new Error(`CORS policy violation: Origin '${origin}' is not permitted by Zhou Consulting API`), false);
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
@@ -86,7 +100,6 @@ app.use(
       'baggage',
       'Cache-Control',
       'Pragma',
-      'X-CSRF-Token',
     ],
     exposedHeaders: ['Content-Range', 'X-Content-Range', 'Authorization'],
     optionsSuccessStatus: 200,

@@ -267,3 +267,266 @@ export const submitContactMessage = async (req: Request, res: Response): Promise
     sendError(res, 500, 'Gagal mengirim pesan kontak', (error as Error).message);
   }
 };
+
+// --- Update & Delete: Services ---
+export const updateService = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    const { service_code, service_name, category, description, is_active } = req.body || {};
+
+    const updated = await prisma.service.update({
+      where: { id },
+      data: {
+        ...(service_code !== undefined && { service_code }),
+        ...(service_name !== undefined && { service_name }),
+        ...(category !== undefined && { category }),
+        ...(description !== undefined && { description }),
+        ...(is_active !== undefined && { is_active }),
+      },
+    });
+
+    sendSuccess(res, 200, 'Layanan berhasil diperbarui', updated);
+  } catch (error) {
+    sendError(res, 500, 'Gagal memperbarui layanan', (error as Error).message);
+  }
+};
+
+export const deleteService = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    await prisma.service.delete({ where: { id } });
+    sendSuccess(res, 200, 'Layanan berhasil dihapus');
+  } catch (error) {
+    sendError(res, 500, 'Gagal menghapus layanan', (error as Error).message);
+  }
+};
+
+// --- Update & Delete: Tax Rates ---
+export const updateTaxRate = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    const { currency_code, rate_value, effective_start_date, effective_end_date } = req.body || {};
+
+    const updated = await prisma.taxRate.update({
+      where: { id },
+      data: {
+        ...(currency_code !== undefined && { currency_code }),
+        ...(rate_value !== undefined && { rate_value }),
+        ...(effective_start_date !== undefined && { effective_start_date: new Date(effective_start_date) }),
+        ...(effective_end_date !== undefined && { effective_end_date: effective_end_date ? new Date(effective_end_date) : null }),
+      },
+    });
+
+    await redis.del('cache:tax_rates');
+    sendSuccess(res, 200, 'Kurs pajak berhasil diperbarui', updated);
+  } catch (error) {
+    sendError(res, 500, 'Gagal memperbarui kurs pajak', (error as Error).message);
+  }
+};
+
+export const deleteTaxRate = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    await prisma.taxRate.delete({ where: { id } });
+    await redis.del('cache:tax_rates');
+    sendSuccess(res, 200, 'Kurs pajak berhasil dihapus');
+  } catch (error) {
+    sendError(res, 500, 'Gagal menghapus kurs pajak', (error as Error).message);
+  }
+};
+
+// --- Update & Delete: Regulations ---
+export const updateRegulation = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    const { title, regulation_type, file_path, file_size } = req.body || {};
+
+    const updated = await prisma.regulation.update({
+      where: { id },
+      data: {
+        ...(title !== undefined && { title }),
+        ...(regulation_type !== undefined && { regulation_type }),
+        ...(file_path !== undefined && { file_path }),
+        ...(file_size !== undefined && { file_size }),
+      },
+    });
+
+    sendSuccess(res, 200, 'Regulasi berhasil diperbarui', updated);
+  } catch (error) {
+    sendError(res, 500, 'Gagal memperbarui regulasi', (error as Error).message);
+  }
+};
+
+export const deleteRegulation = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    await prisma.regulation.delete({ where: { id } });
+    sendSuccess(res, 200, 'Regulasi berhasil dihapus');
+  } catch (error) {
+    sendError(res, 500, 'Gagal menghapus regulasi', (error as Error).message);
+  }
+};
+
+// --- Update & Delete: Education ---
+export const updateEducation = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    const { title, category, content_type, body, file_path } = req.body || {};
+
+    const updated = await prisma.educationContent.update({
+      where: { id },
+      data: {
+        ...(title !== undefined && { title }),
+        ...(category !== undefined && { category }),
+        ...(content_type !== undefined && { content_type }),
+        ...(body !== undefined && { body }),
+        ...(file_path !== undefined && { file_path }),
+      },
+    });
+
+    sendSuccess(res, 200, 'Materi edukasi berhasil diperbarui', updated);
+  } catch (error) {
+    sendError(res, 500, 'Gagal memperbarui materi edukasi', (error as Error).message);
+  }
+};
+
+export const deleteEducation = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    await prisma.educationContent.delete({ where: { id } });
+    sendSuccess(res, 200, 'Materi edukasi berhasil dihapus');
+  } catch (error) {
+    sendError(res, 500, 'Gagal menghapus materi edukasi', (error as Error).message);
+  }
+};
+
+// --- Update & Delete: Careers ---
+export const updateCareer = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    const { position_code, position_title, level, location, description, is_active } = req.body || {};
+
+    const updated = await prisma.careerJob.update({
+      where: { id },
+      data: {
+        ...(position_code !== undefined && { position_code }),
+        ...(position_title !== undefined && { position_title }),
+        ...(level !== undefined && { level }),
+        ...(location !== undefined && { location }),
+        ...(description !== undefined && { description }),
+        ...(is_active !== undefined && { is_active }),
+      },
+    });
+
+    sendSuccess(res, 200, 'Lowongan kerja berhasil diperbarui', updated);
+  } catch (error) {
+    sendError(res, 500, 'Gagal memperbarui lowongan kerja', (error as Error).message);
+  }
+};
+
+export const deleteCareer = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    await prisma.careerJob.delete({ where: { id } });
+    sendSuccess(res, 200, 'Lowongan kerja berhasil dihapus');
+  } catch (error) {
+    sendError(res, 500, 'Gagal menghapus lowongan kerja', (error as Error).message);
+  }
+};
+
+// --- Chatbot FAQs CRUD (Admin) ---
+export const getFaqs = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const faqs = await prisma.chatbotFaq.findMany({ orderBy: { id: 'asc' } });
+    sendSuccess(res, 200, 'Berhasil memuat daftar FAQ chatbot', faqs);
+  } catch (error) {
+    sendError(res, 500, 'Gagal memuat FAQ', (error as Error).message);
+  }
+};
+
+export const createFaq = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { category, question, answer_template } = req.body || {};
+    if (!category || !question || !answer_template) {
+      sendError(res, 400, 'Kategori, pertanyaan, dan template jawaban wajib diisi');
+      return;
+    }
+
+    const faq = await prisma.chatbotFaq.create({
+      data: { category, question, answer_template },
+    });
+
+    await redis.del('cache:chatbot_tree');
+    sendSuccess(res, 201, 'FAQ chatbot berhasil ditambahkan', faq);
+  } catch (error) {
+    sendError(res, 500, 'Gagal membuat FAQ', (error as Error).message);
+  }
+};
+
+export const updateFaq = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    const { category, question, answer_template } = req.body || {};
+
+    const updated = await prisma.chatbotFaq.update({
+      where: { id },
+      data: {
+        ...(category !== undefined && { category }),
+        ...(question !== undefined && { question }),
+        ...(answer_template !== undefined && { answer_template }),
+      },
+    });
+
+    await redis.del('cache:chatbot_tree');
+    sendSuccess(res, 200, 'FAQ chatbot berhasil diperbarui', updated);
+  } catch (error) {
+    sendError(res, 500, 'Gagal memperbarui FAQ', (error as Error).message);
+  }
+};
+
+export const deleteFaq = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    await prisma.chatbotFaq.delete({ where: { id } });
+    await redis.del('cache:chatbot_tree');
+    sendSuccess(res, 200, 'FAQ chatbot berhasil dihapus');
+  } catch (error) {
+    sendError(res, 500, 'Gagal menghapus FAQ', (error as Error).message);
+  }
+};
+
+// --- Update Site Settings / Contact ---
+export const updateContactSettings = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { whatsapp, email, address, phone, settings } = req.body || {};
+
+    if (Array.isArray(settings)) {
+      for (const item of settings) {
+        if (item.setting_key && item.setting_value !== undefined) {
+          await prisma.siteSetting.upsert({
+            where: { setting_key: item.setting_key },
+            update: { setting_value: String(item.setting_value) },
+            create: { setting_key: item.setting_key, setting_value: String(item.setting_value) },
+          });
+        }
+      }
+    } else {
+      const entries = Object.entries({ whatsapp, email, address, phone });
+      for (const [key, value] of entries) {
+        if (value !== undefined) {
+          await prisma.siteSetting.upsert({
+            where: { setting_key: `contact_${key}` },
+            update: { setting_value: String(value) },
+            create: { setting_key: `contact_${key}`, setting_value: String(value) },
+          });
+        }
+      }
+    }
+
+    const updatedList = await prisma.siteSetting.findMany();
+    sendSuccess(res, 200, 'Pengaturan kontak berhasil diperbarui', updatedList);
+  } catch (error) {
+    sendError(res, 500, 'Gagal memperbarui pengaturan kontak', (error as Error).message);
+  }
+};
+

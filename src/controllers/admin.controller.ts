@@ -301,3 +301,26 @@ export const getGlobalDocuments = async (_req: Request, res: Response): Promise<
     sendError(res, 500, 'Gagal memuat repositori dokumen global', (error as Error).message);
   }
 };
+
+export const getClients = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const clients = await prisma.user.findMany({
+      where: { role: 'USER' },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        company_name: true,
+        is_active: true,
+        created_at: true,
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    sendSuccess(res, 200, 'Berhasil memuat daftar klien', clients);
+  } catch (error) {
+    sendError(res, 500, 'Gagal memuat daftar klien', (error as Error).message);
+  }
+};
+
