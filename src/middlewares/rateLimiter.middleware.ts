@@ -12,6 +12,7 @@ export const authRateLimiter = rateLimit({
     if (process.env.NODE_ENV !== 'production') return true;
     return false;
   },
+  validate: { xForwardedForHeader: false },
   standardHeaders: true,
   legacyHeaders: false,
   store: new RedisStore({
@@ -34,6 +35,7 @@ export const apiRateLimiter = rateLimit({
     if (process.env.NODE_ENV !== 'production') return true;
     return false;
   },
+  validate: { xForwardedForHeader: false },
   standardHeaders: true,
   legacyHeaders: false,
   store: new RedisStore({

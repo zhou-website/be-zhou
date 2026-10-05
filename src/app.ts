@@ -17,6 +17,9 @@ initSentry();
 
 export const app: Express = express();
 
+// Percayai Nginx reverse proxy di VPS untuk penanganan header X-Forwarded-For dan rate limiter
+app.set('trust proxy', 1);
+
 // Security and utility middleware
 const helmetMiddleware = helmet({
   contentSecurityPolicy: {
