@@ -142,8 +142,12 @@ app.get('/api/health', async (_req: Request, res: Response) => {
   let dbError: string | null = null;
 
   try {
-    // Check DB connection
-    await prisma.$queryRaw`SELECT 1`;
+    // Check DB connection dengan timeout 3.5s agar health check selalu responsif
+    const dbPing = prisma.$queryRaw`SELECT 1`;
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Koneksi database timeout (>3.5s)')), 3500)
+    );
+    await Promise.race([dbPing, timeout]);
     dbStatus = 'connected';
   } catch (error) {
     dbError = (error as Error).message;

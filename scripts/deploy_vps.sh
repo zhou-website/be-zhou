@@ -20,9 +20,14 @@ git pull origin dev
 echo "🐳 2. Memastikan container PostgreSQL & Redis aktif..."
 docker compose up -d
 
-# Tunggu beberapa detik agar PostgreSQL siap menerima koneksi
-echo "⏳ Menunggu PostgreSQL siap..."
-sleep 3
+# Tunggu PostgreSQL siap menerima koneksi (menggunakan pg_isready)
+echo "⏳ Menunggu PostgreSQL siap menerima koneksi..."
+RETRY_COUNT=0
+until docker exec zhou_postgres pg_isready -U postgres -d zhou_db > /dev/null 2>&1 || [ $RETRY_COUNT -eq 30 ]; do
+  sleep 1
+  RETRY_COUNT=$((RETRY_COUNT+1))
+done
+echo "✅ PostgreSQL siap menerima koneksi."
 
 # 3. Instalasi dependencies
 echo "📦 3. Menginstal dependencies produksi (npm ci)..."
