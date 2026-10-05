@@ -174,6 +174,7 @@ export const googleLogin = async (req: Request, res: Response): Promise<void> =>
       },
     });
   } catch (error) {
+    console.error('❌ Error in googleLogin:', error);
     sendError(res, 500, 'Gagal memproses login Google', (error as Error).message);
   }
 };
