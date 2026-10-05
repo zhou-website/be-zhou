@@ -26,9 +26,10 @@ export const googleLoginSchema = z
   .object({
     token: z.string().optional(),
     id_token: z.string().optional(),
+    credential: z.string().optional(),
     email: z.string().email('Format email tidak valid').optional(),
     name: z.string().optional(),
   })
-  .refine((data) => data.token || data.id_token || data.email, {
-    message: 'Sediakan id_token atau email untuk otentikasi Google OAuth',
+  .refine((data) => data.token || data.id_token || data.credential || data.email, {
+    message: 'Sediakan id_token, credential, atau email untuk otentikasi Google OAuth',
   });

@@ -113,7 +113,7 @@ export const googleLogin = async (req: Request, res: Response): Promise<void> =>
   try {
     let email = req.body?.email;
     let name = req.body?.name;
-    const idToken = req.body?.id_token || req.body?.credential;
+    const idToken = req.body?.id_token || req.body?.credential || req.body?.token;
 
     // Jika frontend mengirimkan ID token Google, verifikasi secara kriptografis
     if (idToken && googleClient && GOOGLE_CLIENT_ID) {
