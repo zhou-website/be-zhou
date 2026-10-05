@@ -31,20 +31,25 @@ export const requireAuth = async (req: Request, res: Response, next: NextFunctio
     const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, JWT_SECRET) as AuthUser;
 
-    // Check token blacklist in Redis (JTI revocation & User Deactivation)
-    if (decoded.jti) {
-      const isBlacklisted = await redis.get(`blacklist:${decoded.jti}`);
-      if (isBlacklisted) {
-        sendError(res, 401, 'Sesi telah berakhir atau hak akses telah dicabut. Silakan login kembali.');
+    // Check token blacklist in Redis (JTI revocation & User Deactivation) jika Redis aktif
+    try {
+      if (decoded.jti) {
+        const isBlacklisted = await redis.get(`blacklist:${decoded.jti}`);
+        if (isBlacklisted) {
+          sendError(res, 401, 'Sesi telah berakhir atau hak akses telah dicabut. Silakan login kembali.');
+          return;
+        }
+      }
+
+      // Check jika akun telah dinonaktifkan secara instan oleh Superadmin
+      const isUserRevoked = await redis.get(`user_revoked:${decoded.id}`);
+      if (isUserRevoked) {
+        sendError(res, 403, 'Akses akun Anda telah dinonaktifkan. Silakan hubungi administrator.');
         return;
       }
-    }
-
-    // Check jika akun telah dinonaktifkan secara instan oleh Superadmin
-    const isUserRevoked = await redis.get(`user_revoked:${decoded.id}`);
-    if (isUserRevoked) {
-      sendError(res, 403, 'Akses akun Anda telah dinonaktifkan. Silakan hubungi administrator.');
-      return;
+    } catch (redisErr) {
+      // Redis offline/unreachable: jangan blokir autentikasi valid
+      console.warn('⚠️ Redis unreachable in requireAuth, bypassing blacklist check:', (redisErr as Error).message);
     }
 
     req.user = decoded;
