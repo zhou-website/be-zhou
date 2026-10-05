@@ -7,6 +7,7 @@ import {
   forgotPassword,
   resetPassword,
 } from '../controllers/auth.controller.js';
+import { getProfile } from '../controllers/user.controller.js';
 import { requireAuth } from '../middlewares/auth.middleware.js';
 import { authRateLimiter } from '../middlewares/rateLimiter.middleware.js';
 import { validate } from '../middlewares/validator.middleware.js';
@@ -27,5 +28,7 @@ router.post('/google', authRateLimiter, validate(googleLoginSchema), googleLogin
 router.post('/forgot-password', authRateLimiter, validate(forgotPasswordSchema), forgotPassword);
 router.post('/reset-password', authRateLimiter, validate(resetPasswordSchema), resetPassword);
 router.post('/logout', requireAuth, logout);
+// Endpoint /me (alias untuk /api/v1/user/profile) agar frontend fleksibel mengambil data akun saat auth check
+router.get('/me', requireAuth, getProfile);
 
 export default router;

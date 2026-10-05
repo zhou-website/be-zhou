@@ -62,6 +62,8 @@ const allowedOrigins = [
   'https://43.173.2.162.sslip.io',
   'https://zhouconsulting.com',
   'https://api.zhouconsulting.com',
+  'https://zhouconsulting.id',
+  'https://api.zhouconsulting.id',
   'http://localhost:3000',
   'http://localhost:3001',
   'http://localhost:5173',
@@ -78,12 +80,12 @@ app.use(
       // Mengizinkan request tanpa origin (seperti Postman, cURL, automated tests, mobile apps)
       if (!origin) return callback(null, true);
 
-      // Cek apakah origin ada di daftar allowedOrigins atau pattern regex (Server IP, sslip.io, vercel.app, zhouconsulting.com)
+      // Cek apakah origin ada di daftar allowedOrigins atau pattern regex (Server IP, sslip.io, vercel.app, zhouconsulting.com/.id)
       const isExplicitlyAllowed = allowedOrigins.includes(origin);
       const isServerIp = /^https?:\/\/43\.173\.2\.162(:[0-9]+)?$/.test(origin);
       const isSslip = /^https?:\/\/[a-zA-Z0-9_.-]*sslip\.io(:[0-9]+)?$/.test(origin);
       const isVercelDeploy = /^https:\/\/[a-zA-Z0-9_.-]+\.vercel\.app$/.test(origin);
-      const isZhouDomain = /^https:\/\/[a-zA-Z0-9_.-]+\.zhouconsulting\.com$/.test(origin);
+      const isZhouDomain = /^https:\/\/[a-zA-Z0-9_.-]+\.zhouconsulting\.(com|id)$/.test(origin);
 
       if (isExplicitlyAllowed || isServerIp || isSslip || isVercelDeploy || isZhouDomain) {
         return callback(null, true);
