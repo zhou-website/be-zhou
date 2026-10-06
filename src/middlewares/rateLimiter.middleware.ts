@@ -15,11 +15,13 @@ export const authRateLimiter = rateLimit({
   validate: { xForwardedForHeader: false },
   standardHeaders: true,
   legacyHeaders: false,
-  store: new RedisStore({
-    // @ts-expect-error RedisStore sendCommand typing
-    sendCommand: (command: string, ...args: string[]) => redis.call(command, ...args),
-    prefix: 'rl:auth:',
-  }),
+  store: process.env.NODE_ENV === 'production'
+    ? new RedisStore({
+        // @ts-expect-error RedisStore sendCommand typing
+        sendCommand: (command: string, ...args: string[]) => redis.call(command, ...args),
+        prefix: 'rl:auth:',
+      })
+    : undefined,
   message: {
     success: false,
     message: 'Terlalu banyak percobaan login. Silakan coba kembali dalam 15 menit.',
@@ -38,11 +40,13 @@ export const apiRateLimiter = rateLimit({
   validate: { xForwardedForHeader: false },
   standardHeaders: true,
   legacyHeaders: false,
-  store: new RedisStore({
-    // @ts-expect-error RedisStore sendCommand typing
-    sendCommand: (command: string, ...args: string[]) => redis.call(command, ...args),
-    prefix: 'rl:general:',
-  }),
+  store: process.env.NODE_ENV === 'production'
+    ? new RedisStore({
+        // @ts-expect-error RedisStore sendCommand typing
+        sendCommand: (command: string, ...args: string[]) => redis.call(command, ...args),
+        prefix: 'rl:general:',
+      })
+    : undefined,
   message: {
     success: false,
     message: 'Batas kuota request tercapai. Silakan coba sesaat lagi.',

@@ -16,32 +16,23 @@ git fetch origin dev
 git checkout dev
 git pull origin dev
 
-# 2. Jalankan database PostgreSQL dan Redis via Docker
-echo "🐳 2. Memastikan container PostgreSQL & Redis aktif..."
-docker compose up -d
-
-# Tunggu PostgreSQL siap menerima koneksi (menggunakan pg_isready)
-echo "⏳ Menunggu PostgreSQL siap menerima koneksi..."
-RETRY_COUNT=0
-until docker exec zhou_postgres pg_isready -U postgres -d zhou_db > /dev/null 2>&1 || [ $RETRY_COUNT -eq 30 ]; do
-  sleep 1
-  RETRY_COUNT=$((RETRY_COUNT+1))
-done
-echo "✅ PostgreSQL siap menerima koneksi."
+# 2. Jalankan service caching Redis via Docker (PostgreSQL sekarang berjalan di Supabase Cloud)
+echo "🐳 2. Memastikan container Redis aktif..."
+docker compose up -d redis
 
 # 3. Instalasi dependencies
 echo "📦 3. Menginstal dependencies produksi (npm ci)..."
 npm ci
 
-# 4. Migrasi skema Prisma ke database
-echo "🗄️ 4. Menjalankan migrasi skema database Prisma..."
-npx prisma migrate deploy
+# 4. Migrasi skema Prisma ke database Supabase
+echo "🗄️ 4. Menjalankan sinkronisasi skema database Prisma..."
+npx prisma db push
 npx prisma generate
 
 # 5. Penegakan database trigger append-only audit log
-echo "🔒 5. Menerapkan trigger append-only pada tabel audit_logs..."
-if [ -f "prisma/triggers/audit_log_trigger.sql" ]; then
-  docker exec -i zhou_postgres psql -U postgres -d zhou_db < prisma/triggers/audit_log_trigger.sql || true
+echo "🔒 5. Menerapkan trigger append-only pada tabel audit_logs di Supabase..."
+if [ -f "scripts/apply_trigger.ts" ]; then
+  npx tsx scripts/apply_trigger.ts || true
   echo "✅ Trigger append-only terverifikasi."
 fi
 
