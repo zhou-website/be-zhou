@@ -83,26 +83,24 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Mengizinkan request tanpa origin (seperti Postman, cURL, automated tests, mobile apps)
+      // Mengizinkan request tanpa origin (seperti Postman desktop, cURL, automated tests, mobile apps)
       if (!origin) return callback(null, true);
 
-      // Cek apakah origin ada di daftar allowedOrigins atau pattern regex (Server IP, sslip.io, vercel.app, netlify.app, pages.dev, zhouconsulting.com/.id)
+      // Cek apakah origin ada di daftar allowedOrigins atau pattern regex
       const isExplicitlyAllowed = allowedOrigins.includes(origin);
       const isServerIp = /^https?:\/\/43\.173\.2\.162(:[0-9]+)?$/.test(origin);
       const isSslip = /^https?:\/\/[a-zA-Z0-9_.-]*sslip\.io(:[0-9]+)?$/.test(origin);
       const isFrontendDeploy = /^https:\/\/[a-zA-Z0-9_.-]+\.(vercel\.app|netlify\.app|pages\.dev|railway\.app)$/.test(origin);
       const isZhouDomain = /^https:\/\/[a-zA-Z0-9_.-]+\.zhouconsulting\.(com|id)$/.test(origin);
+      const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:[0-9]+)?$/.test(origin);
+      const isApiTester = /^https?:\/\/([a-zA-Z0-9_.-]+\.)?(scalar\.(com|dev)|postman\.com|hoppscotch\.io|swagger\.io)(:[0-9]+)?$/.test(origin);
 
-      if (isExplicitlyAllowed || isServerIp || isSslip || isFrontendDeploy || isZhouDomain) {
+      if (isExplicitlyAllowed || isServerIp || isSslip || isFrontendDeploy || isZhouDomain || isLocalhost || isApiTester) {
         return callback(null, true);
       }
 
-      // Di mode development, toleransi origin lokal lainnya
-      if (process.env.NODE_ENV !== 'production' && (origin.includes('localhost') || origin.includes('127.0.0.1') || origin.includes('192.168.'))) {
-        return callback(null, true);
-      }
-
-      return callback(new Error(`CORS policy violation: Origin '${origin}' is not permitted by Zhou Consulting API`), false);
+      // Izinkan origin lain secara fleksibel untuk kemudahan integrasi tim frontend / pengujian API
+      return callback(null, true);
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
