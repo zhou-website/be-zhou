@@ -69,11 +69,11 @@ export const requireRole = (...allowedRoles: string[]) => {
     const userRole = (req.user.role || '').toUpperCase();
     const upperAllowed = allowedRoles.map((r) => r.toUpperCase());
 
-    if (!upperAllowed.includes(userRole)) {
-      sendError(res, 403, 'Akses dilarang: Peran Anda tidak memiliki hak akses untuk endpoint ini');
-      return;
+    // Superadmin sekarang bisa akses ke semua fitur
+    if (userRole === 'SUPERADMIN' || upperAllowed.includes(userRole)) {
+      return next();
     }
 
-    next();
+    sendError(res, 403, 'Akses dilarang: Peran Anda tidak memiliki hak akses untuk endpoint ini');
   };
 };

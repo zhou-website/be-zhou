@@ -52,9 +52,15 @@ app.use((req, res, next) => {
   return helmetMiddleware(req, res, next);
 });
 
+// Support comma-separated FRONTEND_URL from environment
+const frontendUrls = (process.env.FRONTEND_URL || '')
+  .split(',')
+  .map((u) => u.trim())
+  .filter(Boolean);
+
 // Comprehensive CORS configuration with origin whitelist (Server IP, Vercel frontend, localhost, domain)
 const allowedOrigins = [
-  process.env.FRONTEND_URL,
+  ...frontendUrls,
   'http://43.173.2.162',
   'https://43.173.2.162',
   'http://43.173.2.162:5000',
@@ -80,19 +86,19 @@ app.use(
       // Mengizinkan request tanpa origin (seperti Postman, cURL, automated tests, mobile apps)
       if (!origin) return callback(null, true);
 
-      // Cek apakah origin ada di daftar allowedOrigins atau pattern regex (Server IP, sslip.io, vercel.app, zhouconsulting.com/.id)
+      // Cek apakah origin ada di daftar allowedOrigins atau pattern regex (Server IP, sslip.io, vercel.app, netlify.app, pages.dev, zhouconsulting.com/.id)
       const isExplicitlyAllowed = allowedOrigins.includes(origin);
       const isServerIp = /^https?:\/\/43\.173\.2\.162(:[0-9]+)?$/.test(origin);
       const isSslip = /^https?:\/\/[a-zA-Z0-9_.-]*sslip\.io(:[0-9]+)?$/.test(origin);
-      const isVercelDeploy = /^https:\/\/[a-zA-Z0-9_.-]+\.vercel\.app$/.test(origin);
+      const isFrontendDeploy = /^https:\/\/[a-zA-Z0-9_.-]+\.(vercel\.app|netlify\.app|pages\.dev|railway\.app)$/.test(origin);
       const isZhouDomain = /^https:\/\/[a-zA-Z0-9_.-]+\.zhouconsulting\.(com|id)$/.test(origin);
 
-      if (isExplicitlyAllowed || isServerIp || isSslip || isVercelDeploy || isZhouDomain) {
+      if (isExplicitlyAllowed || isServerIp || isSslip || isFrontendDeploy || isZhouDomain) {
         return callback(null, true);
       }
 
       // Di mode development, toleransi origin lokal lainnya
-      if (process.env.NODE_ENV !== 'production' && (origin.includes('localhost') || origin.includes('127.0.0.1'))) {
+      if (process.env.NODE_ENV !== 'production' && (origin.includes('localhost') || origin.includes('127.0.0.1') || origin.includes('192.168.'))) {
         return callback(null, true);
       }
 
@@ -217,11 +223,31 @@ app.use((req: Request, res: Response) => {
 // Centralized error handling middleware
 app.use((err: any, _req: Request, res: Response, _next: any) => {
   console.error('Unhandled server error:', err);
+
+  // Tangani error multer (misal ukuran melebihi batas 5MB)
+  if (err.name === 'MulterError' || err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(400).json({
+      success: false,
+      message: err.code === 'LIMIT_FILE_SIZE'
+        ? 'Ukuran berkas melebihi batas maksimal 5MB'
+        : `Kesalahan unggah berkas: ${err.message}`,
+    });
+  }
+
+  // Tangani error file filter (misal format berkas tidak didukung)
+  if (err.message && err.message.includes('Format berkas tidak didukung')) {
+    return res.status(400).json({
+      success: false,
+      message: err.message,
+    });
+  }
+
   res.status(err.status || 500).json({
     success: false,
     message: err.message || 'Terjadi kesalahan internal pada server',
     errors: process.env.NODE_ENV === 'development' ? err.stack : undefined,
   });
 });
+
 
 

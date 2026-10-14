@@ -1,8 +1,11 @@
 import { Request, Response } from 'express';
+import path from 'path';
 import { prisma } from '../config/database.js';
 import { redis } from '../config/redis.js';
 import { sendSuccess, sendError } from '../utils/response.js';
 import { getSignedDownloadUrl, uploadFileToStorage } from '../services/storage.service.js';
+import { getUploadedFile } from '../middlewares/upload.middleware.js';
+
 
 export const getDashboardOverview = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -79,6 +82,14 @@ export const getConsultations = async (req: Request, res: Response): Promise<voi
             category: true,
           },
         },
+        assigned_admin: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+          },
+        },
         tasks: {
           select: {
             id: true,
@@ -111,8 +122,14 @@ export const getConsultations = async (req: Request, res: Response): Promise<voi
         progress_percent: 60,
         service: {
           service_code: 'TAX_CORE',
-          service_name: 'Tax Service Core & Compliance',
+          service_name: 'Tax Service Core & Kesiapan Coretax',
           category: 'TAX',
+        },
+        assigned_admin: {
+          id: 2,
+          name: 'Konsultan Senior Zhou',
+          email: 'admin@zhouconsulting.com',
+          phone: '+6281234567891',
         },
         tasks: [
           { id: 1, task_name: 'Pengumpulan Rekapitulasi Faktur Pajak Masukan/Keluaran', is_completed: true },
@@ -128,18 +145,30 @@ export const getConsultations = async (req: Request, res: Response): Promise<voi
 
 export const getConsultationDetail = async (req: Request, res: Response): Promise<void> => {
   try {
+    const userRole = (req.user?.role || '').toUpperCase();
     const clientId = req.user?.id;
     const projectId = parseInt(String(req.params.id), 10);
 
+    if (isNaN(projectId)) {
+      sendError(res, 400, 'ID konsultasi tidak valid');
+      return;
+    }
+
+    const isElevated = userRole === 'ADMIN' || userRole === 'SUPERADMIN';
     const project = await prisma.consultationProject.findFirst({
-      where: {
-        id: projectId,
-        client_id: clientId,
-      },
+      where: isElevated ? { id: projectId } : { id: projectId, client_id: clientId },
       include: {
         service: true,
-        tasks: true,
-        documents: true,
+        tasks: { orderBy: { id: 'asc' } },
+        documents: { orderBy: { created_at: 'desc' } },
+        assigned_admin: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+          },
+        },
       },
     });
 
@@ -148,7 +177,18 @@ export const getConsultationDetail = async (req: Request, res: Response): Promis
       return;
     }
 
-    sendSuccess(res, 200, 'Berhasil memuat detail konsultasi', project);
+    // Perkaya dokumen dengan signed download URL agar klien dapat langsung mengunduh berkas (Item #4 Revisi FE)
+    const docsWithUrls = await Promise.all(
+      project.documents.map(async (doc) => ({
+        ...doc,
+        download_url: await getSignedDownloadUrl(doc.file_path, 3600),
+      }))
+    );
+
+    sendSuccess(res, 200, 'Berhasil memuat detail konsultasi', {
+      ...project,
+      documents: docsWithUrls,
+    });
   } catch (error) {
     sendError(res, 500, 'Gagal memuat detail konsultasi', (error as Error).message);
   }
@@ -156,10 +196,12 @@ export const getConsultationDetail = async (req: Request, res: Response): Promis
 
 export const getDocuments = async (req: Request, res: Response): Promise<void> => {
   try {
+    const userRole = (req.user?.role || '').toUpperCase();
     const clientId = req.user?.id;
+    const isElevated = userRole === 'ADMIN' || userRole === 'SUPERADMIN';
 
     const documents = await prisma.projectDocument.findMany({
-      where: {
+      where: isElevated ? {} : {
         project: {
           client_id: clientId,
         },
@@ -176,7 +218,14 @@ export const getDocuments = async (req: Request, res: Response): Promise<void> =
       orderBy: { created_at: 'desc' },
     });
 
-    sendSuccess(res, 200, 'Berhasil memuat repositori dokumen klien', documents);
+    const docsWithUrls = await Promise.all(
+      documents.map(async (doc) => ({
+        ...doc,
+        download_url: await getSignedDownloadUrl(doc.file_path, 3600),
+      }))
+    );
+
+    sendSuccess(res, 200, 'Berhasil memuat repositori dokumen klien', docsWithUrls);
   } catch (error) {
     sendError(res, 500, 'Gagal memuat dokumen repositori', (error as Error).message);
   }
@@ -184,16 +233,20 @@ export const getDocuments = async (req: Request, res: Response): Promise<void> =
 
 export const downloadDocument = async (req: Request, res: Response): Promise<void> => {
   try {
+    const userRole = (req.user?.role || '').toUpperCase();
     const clientId = req.user?.id;
     const documentId = parseInt(String(req.params.id), 10);
+    const isElevated = userRole === 'ADMIN' || userRole === 'SUPERADMIN';
 
     const doc = await prisma.projectDocument.findFirst({
-      where: {
-        id: documentId,
-        project: {
-          client_id: clientId,
-        },
-      },
+      where: isElevated
+        ? { id: documentId }
+        : {
+            id: documentId,
+            project: {
+              client_id: clientId,
+            },
+          },
     });
 
     if (!doc) {
@@ -217,20 +270,50 @@ export const downloadDocument = async (req: Request, res: Response): Promise<voi
 
 export const getChatbotTree = async (_req: Request, res: Response): Promise<void> => {
   try {
-    const cachedTree = await redis.get('cache:chatbot_tree');
-    if (cachedTree) {
-      sendSuccess(res, 200, 'Pohon keputusan chatbot berhasil dimuat (Cache)', JSON.parse(cachedTree));
-      return;
+    try {
+      const cachedTree = await redis.get('cache:chatbot_tree');
+      if (cachedTree) {
+        sendSuccess(res, 200, 'Pohon keputusan chatbot berhasil dimuat (Cache)', JSON.parse(cachedTree));
+        return;
+      }
+    } catch {
+      // Redis offline: bypass cache and read directly from database
     }
 
     const faqs = await prisma.chatbotFaq.findMany({
       orderBy: { id: 'asc' },
     });
 
-    await redis.set('cache:chatbot_tree', JSON.stringify(faqs), 'EX', 3600); // 1 jam cache
+    try {
+      await redis.set('cache:chatbot_tree', JSON.stringify(faqs), 'EX', 3600); // 1 jam cache
+    } catch {}
+
     sendSuccess(res, 200, 'Pohon keputusan chatbot berhasil dimuat', faqs);
   } catch (error) {
-    sendError(res, 500, 'Gagal memuat FAQ chatbot', (error as Error).message);
+    console.warn('⚠️ Database query failed in getChatbotTree, fallback mode:', (error as Error).message);
+    sendSuccess(res, 200, 'Pohon keputusan chatbot berhasil dimuat (mode siaga)', [
+      {
+        id: 1,
+        category: 'LAYANAN',
+        question: 'Layanan apa saja yang disediakan Zhou Consulting?',
+        answer_template:
+          'Kami menyediakan Tax Service Core & Kesiapan Coretax, Accounting Service, Business Financial Consulting, dan Legal & Tax Dispute Advisory.',
+      },
+      {
+        id: 2,
+        category: 'KONSULTASI',
+        question: 'Bagaimana cara memulai konsultasi perpajakan?',
+        answer_template:
+          'Anda dapat mendaftarkan akun korporasi di website ini, membuka tiket konsultasi, atau langsung mengklik tombol konsultasi WhatsApp.',
+      },
+      {
+        id: 3,
+        category: 'SP2DK',
+        question: 'Perusahaan saya menerima surat SP2DK dari KPP, apa yang harus dilakukan?',
+        answer_template:
+          'Segera hubungi tim konsultan Zhou Consulting dan unggah dokumen SP2DK Anda. Kami akan meninjau data fiskal Anda dan menyusun tanggapan resmi.',
+      },
+    ]);
   }
 };
 
@@ -295,17 +378,16 @@ export const uploadClientDocument = async (req: Request, res: Response): Promise
     let fileName = body.file_name;
     let filePath = body.file_path;
     let fileSize = body.file_size || '0 KB';
-    let fileType = body.file_type || 'PDF';
+    let fileType = (body.file_type || 'PDF').toUpperCase();
 
-    if (req.file) {
-      fileName = req.file.originalname;
-      fileSize = `${(req.file.size / 1024).toFixed(1)} KB`;
-      fileType = req.file.mimetype.includes('pdf')
-        ? 'PDF'
-        : req.file.mimetype.includes('spreadsheet') || req.file.mimetype.includes('excel')
-        ? 'XLSX'
-        : 'DOCX';
-      const uploadResult = await uploadFileToStorage(fileName, req.file.buffer, req.file.mimetype);
+    const file = getUploadedFile(req);
+    if (file) {
+      fileName = body.file_name || file.originalname;
+      fileSize = `${(file.size / 1024).toFixed(1)} KB`;
+      const ext = path.extname(file.originalname).toLowerCase();
+      const detected = ext.includes('xls') ? 'XLSX' : ext.includes('doc') ? 'DOCX' : ext.includes('png') || ext.includes('jp') ? 'IMAGE' : 'PDF';
+      fileType = (body.file_type || detected).toUpperCase();
+      const uploadResult = await uploadFileToStorage(fileName, file.buffer, file.mimetype, 'documents');
       filePath = uploadResult.filePath;
     }
 
@@ -325,7 +407,12 @@ export const uploadClientDocument = async (req: Request, res: Response): Promise
       },
     });
 
-    sendSuccess(res, 201, 'Dokumen berhasil diunggah oleh klien', doc);
+    const downloadUrl = await getSignedDownloadUrl(doc.file_path, 3600);
+    sendSuccess(res, 201, 'Dokumen berhasil diunggah oleh klien', {
+      ...doc,
+      download_url: downloadUrl,
+    });
+
   } catch (error) {
     sendError(res, 500, 'Gagal mengunggah dokumen klien', (error as Error).message);
   }

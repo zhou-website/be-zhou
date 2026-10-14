@@ -377,5 +377,277 @@ spec.paths['/api/v1/user/sessions/{id}'] = {
   },
 };
 
+// 13. GET /api/v1/public/careers & /api/v1/careers
+const careerGetSpec = {
+  get: {
+    tags: ['Public'],
+    summary: 'Daftar Lowongan Karir Aktif',
+    description: 'Mengambil lowongan pekerjaan aktif beserta informasi format berkas yang diperbolehkan (PDF, DOCX, DOC maks 5MB).',
+    responses: {
+      '200': {
+        description: 'Daftar lowongan kerja berhasil dimuat',
+      },
+    },
+  },
+};
+spec.paths['/api/v1/public/careers'] = careerGetSpec;
+spec.paths['/api/v1/careers'] = careerGetSpec;
+
+// 14. GET /api/v1/public/careers/{id} & /api/v1/careers/{id}
+const careerDetailSpec = {
+  get: {
+    tags: ['Public'],
+    summary: 'Detail Lowongan Karir',
+    description: 'Mengambil rincian lowongan pekerjaan berdasarkan ID beserta ketentuan unggah berkas CV.',
+    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
+    responses: {
+      '200': { description: 'Detail lowongan berhasil dimuat' },
+      '404': { description: 'Lowongan tidak ditemukan' },
+    },
+  },
+};
+spec.paths['/api/v1/public/careers/{id}'] = careerDetailSpec;
+spec.paths['/api/v1/careers/{id}'] = careerDetailSpec;
+
+// 15. POST /api/v1/public/careers/{id}/apply & /api/v1/careers/{id}/apply
+const careerApplySpec = {
+  post: {
+    tags: ['Public'],
+    summary: 'Kirim Lamaran Kerja & Unggah CV Pelamar',
+    description: 'Pelamar memasukkan biodata diri dan memilih berkas CV (PDF, DOCX, DOC). Berkas otomatis diunggah ke Supabase Storage, tersimpan ke PostgreSQL, dan dikonfirmasi via email Resend.',
+    parameters: [
+      {
+        name: 'id',
+        in: 'path',
+        required: true,
+        schema: { type: 'integer' },
+        description: 'ID Lowongan Karir yang dilamar',
+      },
+    ],
+    requestBody: {
+      required: true,
+      content: {
+        'multipart/form-data': {
+          schema: {
+            type: 'object',
+            required: ['applicant_name', 'applicant_email'],
+            properties: {
+              file: {
+                type: 'string',
+                format: 'binary',
+                description: 'Pilih Berkas CV/Resume (Select File: PDF, DOCX, DOC - Maksimal 5MB)',
+              },
+              file_type: {
+                type: 'string',
+                enum: ['PDF', 'DOCX', 'DOC'],
+                example: 'PDF',
+                description: 'Pilihan jenis berkas CV yang diunggah (select file type)',
+              },
+              applicant_name: {
+                type: 'string',
+                example: 'Ahmad Fauzi',
+                description: 'Nama lengkap pelamar',
+              },
+              applicant_email: {
+                type: 'string',
+                example: 'ahmad.fauzi@gmail.com',
+                description: 'Alamat email pelamar',
+              },
+              applicant_phone: {
+                type: 'string',
+                example: '+6281234567890',
+                description: 'Nomor telepon/WhatsApp pelamar',
+              },
+              cv_file_path: {
+                type: 'string',
+                example: 'cvs/1791361961730_CV_Ahmad.pdf',
+                description: 'Path berkas jika CV sudah diunggah sebelumnya (opsional jika memilih file)',
+              },
+            },
+          },
+        },
+      },
+    },
+    responses: {
+      '201': {
+        description: 'Lamaran kerja berhasil dikirimkan dan berkas CV tersimpan di Supabase Storage',
+      },
+      '400': { description: 'Biodata tidak lengkap atau berkas CV belum dipilih' },
+      '404': { description: 'Lowongan kerja tidak ditemukan' },
+    },
+  },
+};
+spec.paths['/api/v1/public/careers/{id}/apply'] = careerApplySpec;
+spec.paths['/api/v1/careers/{id}/apply'] = careerApplySpec;
+
+// 16. POST /api/v1/public/upload & /api/v1/upload
+const uploadPublicSpec = {
+  post: {
+    tags: ['Public'],
+    summary: 'Unggah Berkas Publik ke Supabase Storage',
+    description: 'Helper endpoint untuk mengunggah berkas mandiri ke Supabase Storage dan memperoleh signed URL serta file_path.',
+    requestBody: {
+      required: true,
+      content: {
+        'multipart/form-data': {
+          schema: {
+            type: 'object',
+            required: ['file'],
+            properties: {
+              file: {
+                type: 'string',
+                format: 'binary',
+                description: 'Pilih Berkas yang diunggah (PDF, DOCX, XLS, PNG, JPEG, maks 5MB)',
+              },
+              folder: {
+                type: 'string',
+                example: 'cvs',
+                description: 'Folder tujuan penyimpanan (cvs, documents, avatars, dll)',
+              },
+            },
+          },
+        },
+      },
+    },
+    responses: {
+      '201': { description: 'Berkas berhasil diunggah ke storage' },
+      '400': { description: 'Berkas belum dipilih atau ukuran melebihi batas' },
+    },
+  },
+};
+spec.paths['/api/v1/public/upload'] = uploadPublicSpec;
+spec.paths['/api/v1/upload'] = uploadPublicSpec;
+
+// 17. GET /api/v1/admin/cms/job-applications
+spec.paths['/api/v1/admin/cms/job-applications'] = {
+  get: {
+    tags: ['CMS Admin'],
+    summary: 'Daftar Lamaran Kerja Masuk & Tautan CV',
+    description: 'Admin meninjau pelamar kerja beserta signed URL untuk mengunduh berkas CV langsung dari Supabase Storage.',
+    security: [{ BearerAuth: [] }],
+    responses: {
+      '200': { description: 'Daftar lamaran kerja berhasil dimuat' },
+    },
+  },
+};
+
+// 18. GET /api/v1/admin/cms/job-applications/{id}/download
+spec.paths['/api/v1/admin/cms/job-applications/{id}/download'] = {
+  get: {
+    tags: ['CMS Admin'],
+    summary: 'Unduh Berkas CV Pelamar Kerja (Signed URL Supabase)',
+    description: 'Menghasilkan tautan unduh berbatas waktu (signed URL 1 jam) dari Supabase Storage untuk berkas CV pelamar tertentu.',
+    security: [{ BearerAuth: [] }],
+    parameters: [
+      {
+        name: 'id',
+        in: 'path',
+        required: true,
+        schema: { type: 'integer' },
+        description: 'ID data lamaran kerja (job_application id)',
+      },
+    ],
+    responses: {
+      '200': { description: 'Signed URL CV pelamar berhasil digenerate' },
+      '404': { description: 'Berkas CV atau lamaran tidak ditemukan' },
+    },
+  },
+};
+
+// 19. Education Detail & Download
+const eduDetailSpec = {
+  get: {
+    tags: ['Public'],
+    summary: 'Detail Konten Edukasi Perpajakan',
+    description: 'Mengambil detail artikel atau materi panduan edukasi pajak beserta tautan berkas dari Supabase Storage.',
+    parameters: [
+      {
+        name: 'id',
+        in: 'path',
+        required: true,
+        schema: { type: 'integer' },
+        description: 'ID konten edukasi',
+      },
+    ],
+    responses: {
+      '200': { description: 'Detail edukasi berhasil dimuat' },
+      '404': { description: 'Materi edukasi tidak ditemukan' },
+    },
+  },
+};
+spec.paths['/api/v1/public/education/{id}'] = eduDetailSpec;
+spec.paths['/api/v1/education/{id}'] = eduDetailSpec;
+
+const eduDownloadSpec = {
+  get: {
+    tags: ['Public'],
+    summary: 'Unduh Berkas Materi Panduan Edukasi (Signed URL)',
+    description: 'Mendapatkan signed URL Supabase Storage berbatas waktu untuk mengunduh lampiran materi/panduan edukasi.',
+    parameters: [
+      {
+        name: 'id',
+        in: 'path',
+        required: true,
+        schema: { type: 'integer' },
+        description: 'ID konten edukasi',
+      },
+    ],
+    responses: {
+      '200': { description: 'Tautan unduh berkas edukasi berhasil dibuat' },
+      '404': { description: 'Berkas materi edukasi tidak ditemukan' },
+    },
+  },
+};
+spec.paths['/api/v1/public/education/{id}/download'] = eduDownloadSpec;
+spec.paths['/api/v1/education/{id}/download'] = eduDownloadSpec;
+
+// 20. Regulation Detail & Download
+const regDetailSpec = {
+  get: {
+    tags: ['Public'],
+    summary: 'Detail Regulasi Perpajakan',
+    description: 'Mengambil informasi lengkap regulasi beserta tautan berkas resmi perpajakan dari Supabase Storage.',
+    parameters: [
+      {
+        name: 'id',
+        in: 'path',
+        required: true,
+        schema: { type: 'integer' },
+        description: 'ID regulasi pajak',
+      },
+    ],
+    responses: {
+      '200': { description: 'Detail regulasi berhasil dimuat' },
+      '404': { description: 'Dokumen regulasi tidak ditemukan' },
+    },
+  },
+};
+spec.paths['/api/v1/public/regulations/{id}'] = regDetailSpec;
+spec.paths['/api/v1/regulations/{id}'] = regDetailSpec;
+
+const regDownloadSpec = {
+  get: {
+    tags: ['Public'],
+    summary: 'Unduh Berkas Regulasi Pajak (Signed URL)',
+    description: 'Mendapatkan signed URL Supabase Storage berbatas waktu untuk mengunduh salinan berkas resmi regulasi pajak.',
+    parameters: [
+      {
+        name: 'id',
+        in: 'path',
+        required: true,
+        schema: { type: 'integer' },
+        description: 'ID regulasi pajak',
+      },
+    ],
+    responses: {
+      '200': { description: 'Tautan unduh regulasi berhasil digenerate' },
+      '404': { description: 'Berkas regulasi tidak ditemukan' },
+    },
+  },
+};
+spec.paths['/api/v1/public/regulations/{id}/download'] = regDownloadSpec;
+spec.paths['/api/v1/regulations/{id}/download'] = regDownloadSpec;
+
 fs.writeFileSync(openApiPath, JSON.stringify(spec, null, 2), 'utf8');
 console.log('✅ Successfully updated docs/openapi.json with all new endpoints! Total paths:', Object.keys(spec.paths).length);
+

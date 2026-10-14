@@ -251,3 +251,104 @@ export const exportAuditLogs = async (_req: Request, res: Response): Promise<voi
     sendError(res, 500, 'Gagal mengekspor log audit', (error as Error).message);
   }
 };
+
+export const updateAdmin = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const adminId = parseInt(String(req.params.id), 10);
+    const superadminId = req.user?.id;
+    const { name, email, role, phone, password, is_active } = req.body || {};
+
+    const existingAdmin = await prisma.user.findUnique({ where: { id: adminId } });
+    if (!existingAdmin) {
+      sendError(res, 404, 'Akun staf admin tidak ditemukan');
+      return;
+    }
+
+    if (email && email !== existingAdmin.email) {
+      const emailTaken = await prisma.user.findUnique({ where: { email } });
+      if (emailTaken) {
+        sendError(res, 409, 'Alamat email sudah digunakan oleh pengguna lain');
+        return;
+      }
+    }
+
+    const updateData: Record<string, unknown> = {};
+    if (name !== undefined) updateData.name = name;
+    if (email !== undefined) updateData.email = email;
+    if (phone !== undefined) updateData.phone = phone;
+    if (role !== undefined) updateData.role = role === 'SUPERADMIN' ? 'SUPERADMIN' : 'ADMIN';
+    if (is_active !== undefined) updateData.is_active = Boolean(is_active);
+    if (password) {
+      updateData.password = await bcrypt.hash(password, 10);
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: adminId },
+      data: updateData,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        phone: true,
+        is_active: true,
+        created_at: true,
+        updated_at: true,
+      },
+    });
+
+    if (superadminId) {
+      await prisma.auditLog.create({
+        data: {
+          admin_id: superadminId,
+          action: 'ADMIN_UPDATE',
+          description: `Superadmin memperbarui profil staf: ${updated.email} (${updated.name})`,
+        },
+      });
+    }
+
+    sendSuccess(res, 200, 'Data staf admin berhasil diperbarui', updated);
+  } catch (error) {
+    sendError(res, 500, 'Gagal memperbarui data admin', (error as Error).message);
+  }
+};
+
+export const reactivateAdmin = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const adminId = parseInt(String(req.params.id), 10);
+    const superadminId = req.user?.id;
+
+    const admin = await prisma.user.update({
+      where: { id: adminId },
+      data: { is_active: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        is_active: true,
+      },
+    });
+
+    try {
+      await redis.del(`user_revoked:${adminId}`);
+    } catch (redisErr) {
+      console.warn('⚠️ Redis del user_revoked skipped:', (redisErr as Error).message);
+    }
+
+    if (superadminId) {
+      await prisma.auditLog.create({
+        data: {
+          admin_id: superadminId,
+          action: 'ADMIN_REACTIVATE',
+          description: `Superadmin mengaktifkan kembali akun staf: ${admin.email}`,
+        },
+      });
+    }
+
+    sendSuccess(res, 200, 'Akun staf berhasil diaktifkan kembali', admin);
+  } catch (error) {
+    sendError(res, 500, 'Gagal mengaktifkan kembali staf', (error as Error).message);
+  }
+};
+

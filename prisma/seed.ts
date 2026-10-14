@@ -67,13 +67,21 @@ async function main() {
   });
   console.log(`✅ Client seeded: ${client.email} (ID: ${client.id})`);
 
-  // 2. Seed Services (4 Core Services PRD)
+  // 2. Seed Services (4 Core Services PRD & Revisi FE Coretax)
   const services = [
     {
       service_code: 'TAX_CORE',
-      service_name: 'Tax Service Core',
+      service_name: 'Tax Service Core & Kesiapan Coretax',
       category: 'Perpajakan',
-      description: 'Layanan kepatuhan dan pelaporan SPT Masa & Tahunan Badan/Pribadi secara komprehensif.',
+      description: 'Layanan kepatuhan dan pelaporan SPT Masa & Tahunan Badan/Pribadi serta pendampingan transisi Coretax DJP.',
+      card_explanation:
+        'Pendampingan komprehensif kepatuhan perpajakan korporasi dan transisi kesiapan sistem Coretax DJP. Meliputi penyusunan & pelaporan SPT Masa PPh & PPN, rekonsiliasi fiskal, ekualisasi omzet, validasi faktur, dan SPT Tahunan Badan 1771.',
+      features: JSON.stringify([
+        'Pendampingan Transisi & Kesiapan Coretax DJP',
+        'Pelaporan SPT Masa PPh & PPN Tepat Waktu',
+        'Rekonsiliasi Fiskal & SPT Tahunan Badan 1771',
+        'Mitigasi Risiko Denda & Kepatuhan Regulasi Pajak',
+      ]),
       is_active: true,
     },
     {
@@ -81,6 +89,14 @@ async function main() {
       service_name: 'Accounting Service',
       category: 'Akuntansi',
       description: 'Penyusunan laporan keuangan neraca, laba rugi, buku besar, dan rekonsiliasi pembukuan profesional.',
+      card_explanation:
+        'Penyusunan laporan keuangan komprehensif berstandar PSAK/SAK Indonesia, mencakup neraca, laba rugi, buku besar, jurnal penyesuaian, serta rekonsiliasi perbankan multi-rekening secara berkala.',
+      features: JSON.stringify([
+        'Laporan Posisi Keuangan (Neraca) & Laba Rugi',
+        'Pencatatan Jurnal & Buku Besar Terstandar PSAK',
+        'Rekonsiliasi Bank & Manajemen Kas Berkala',
+        'Review & Supervisi Akuntansi Korporasi',
+      ]),
       is_active: true,
     },
     {
@@ -88,6 +104,14 @@ async function main() {
       service_name: 'Business Financial Consulting',
       category: 'Konsultasi Finansial',
       description: 'Analisis strategi finansial, evaluasi kelayakan investasi, dan optimasi arus kas perusahaan.',
+      card_explanation:
+        'Konsultasi finansial strategis untuk restrukturisasi keuangan korporasi, evaluasi kelayakan investasi modal, optimalisasi manajemen arus kas operasional, dan perencanaan anggaran bisnis tahunan.',
+      features: JSON.stringify([
+        'Analisis Kesehatan & Kinerja Finansial Korporasi',
+        'Perencanaan Anggaran & Optimalisasi Arus Kas',
+        'Evaluasi Kelayakan Investasi & Studi Finansial',
+        'Restrukturisasi Finansial & Mitigasi Risiko',
+      ]),
       is_active: true,
     },
     {
@@ -95,6 +119,14 @@ async function main() {
       service_name: 'Legal & Tax Dispute Advisory',
       category: 'Legalitas & Sengketa',
       description: 'Pendampingan pemeriksaan pajak, klarifikasi SP2DK, pengajuan keberatan, dan mitigasi risiko regulasi.',
+      card_explanation:
+        'Pendampingan hukum dan advokasi sengketa perpajakan terpercaya. Meliputi pendampingan pemeriksaan KPP, penyusunan tanggapan resmi surat klarifikasi SP2DK, pengajuan surat keberatan pajak, hingga proses banding di Pengadilan Pajak.',
+      features: JSON.stringify([
+        'Pendampingan Pemeriksaan Pajak (Audit Assistance)',
+        'Penyusunan Tanggapan Resmi Surat Klarifikasi SP2DK',
+        'Pengajuan Permohonan Keberatan Pajak',
+        'Advokasi & Banding di Pengadilan Pajak',
+      ]),
       is_active: true,
     },
   ];
@@ -106,6 +138,8 @@ async function main() {
         service_name: s.service_name,
         category: s.category,
         description: s.description,
+        card_explanation: s.card_explanation,
+        features: s.features,
         is_active: s.is_active,
       },
       create: s,
@@ -229,6 +263,7 @@ async function main() {
           project_code: 'PRJ-TAX-2026-001',
           client_id: client.id,
           service_id: taxService.id,
+          assigned_admin_id: admin.id,
           title: 'SPT Tahunan Badan PT Maju Sukses Berdikari 2025',
           description: 'Penyusunan rekonsiliasi fiskal dan pelaporan SPT Tahunan Badan 1771 tahun pajak 2025.',
           status: 'IN_PROGRESS',
@@ -244,8 +279,50 @@ async function main() {
           },
         },
       });
-      console.log(`✅ Sample Project seeded: ${project.title} (${project.project_code}) with 5 tasks`);
+      console.log(`✅ Sample Project seeded: ${project.title} (${project.project_code}) with 5 tasks & assigned to Admin PIC`);
+    } else {
+      await prisma.consultationProject.update({
+        where: { id: existingProject.id },
+        data: { assigned_admin_id: admin.id },
+      });
+      console.log(`✅ Sample Project updated: assigned to Admin PIC ${admin.email}`);
     }
+  }
+
+  // 8. Seed Education Contents (Konten Edukasi dengan Foto & Panduan)
+  const existingEducation = await prisma.educationContent.count();
+  if (existingEducation === 0) {
+    const educations = [
+      {
+        title: 'Panduan Lengkap Kesiapan Transisi Coretax DJP 2026 untuk Korporasi',
+        category: 'Kesiapan Coretax',
+        content_type: 'GUIDE',
+        body: 'Direktorat Jenderal Pajak (DJP) mengimplementasikan sistem inti perpajakan terpadu (Coretax). Pelajari langkah strategis integrasi data SPT dan kesiapan kepatuhan bisnis Anda.',
+        image_url: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=800&q=80',
+        created_by: superadmin.id,
+      },
+      {
+        title: 'Strategi Manajemen Pembukuan & Rekonsiliasi Fiskal Akhir Tahun',
+        category: 'Akuntansi & Pajak',
+        content_type: 'ARTICLE',
+        body: 'Rekonsiliasi fiskal memegang peran krusial dalam menyelaraskan laba akuntansi komersial dengan ketentuan peraturan perpajakan yang berlaku di Indonesia.',
+        image_url: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80',
+        created_by: admin.id,
+      },
+      {
+        title: 'Mitigasi Risiko Pemeriksaan Pajak & Tata Cara Klarifikasi SP2DK',
+        category: 'Legalitas & Sengketa',
+        content_type: 'ARTICLE',
+        body: 'Langkah taktis dan format tanggapan formal saat perusahaan Anda menerima Surat Permintaan Penjelasan atas Data dan/atau Keterangan (SP2DK) dari Kantor Pelayanan Pajak.',
+        image_url: 'https://images.unsplash.com/photo-1450133064473-71024230f91b?auto=format&fit=crop&w=800&q=80',
+        created_by: superadmin.id,
+      },
+    ];
+
+    for (const edu of educations) {
+      await prisma.educationContent.create({ data: edu });
+    }
+    console.log(`✅ Education Contents seeded (${educations.length} items with photos)`);
   }
 
   console.log('✨ All seed data created successfully!');

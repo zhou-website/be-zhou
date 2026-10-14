@@ -42,7 +42,7 @@
     },
     {
       "name": "CMS Admin",
-      "description": "Manajemen konten CMS oleh admin"
+      "description": "Manajemen konten CMS (Khusus Superadmin sesuai Revisi FE Item #9 & #10)"
     },
     {
       "name": "Public CMS",
@@ -2292,39 +2292,46 @@
                   "file": {
                     "type": "string",
                     "format": "binary",
-                    "description": "File dokumen (PDF, XLSX, DOCX)"
+                    "description": "Unggah berkas fisik dokumen (Format PDF, Maksimal 10MB)",
+                    "contentMediaType": "application/pdf"
+                  },
+                  "file_type": {
+                    "type": "string",
+                    "enum": [
+                      "PDF"
+                    ],
+                    "default": "PDF",
+                    "description": "Pilihan format jenis berkas input: PDF"
+                  },
+                  "file_name": {
+                    "type": "string",
+                    "example": "Kertas_Kerja_Pemeriksaan.pdf",
+                    "description": "Nama berkas laporan/kertas kerja"
                   }
-                }
+                },
+                "required": [
+                  "file"
+                ]
               }
             },
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": [
-                  "file_name",
-                  "file_path"
-                ],
                 "properties": {
                   "file_name": {
                     "type": "string",
-                    "example": "Laporan_Audit_Q3_2026.pdf"
+                    "example": "Kertas_Kerja_Pemeriksaan.pdf"
                   },
                   "file_path": {
                     "type": "string",
-                    "example": "documents/project-1/Laporan_Audit_Q3_2026.pdf"
-                  },
-                  "file_size": {
-                    "type": "string",
-                    "example": "1.2 MB"
+                    "example": "documents/project-1/Kertas_Kerja.pdf"
                   },
                   "file_type": {
                     "type": "string",
                     "enum": [
-                      "PDF",
-                      "XLSX",
-                      "DOCX"
+                      "PDF"
                     ],
-                    "example": "PDF"
+                    "default": "PDF"
                   }
                 }
               }
@@ -2629,8 +2636,8 @@
         "tags": [
           "CMS Admin"
         ],
-        "summary": "Tambah dokumen regulasi",
-        "description": "Menambahkan entri dokumen regulasi perpajakan baru.",
+        "summary": "Unggah Peraturan Perpajakan Baru (Khusus Superadmin)",
+        "description": "Menambahkan peraturan perpajakan baru dengan lampiran berkas resmi PDF ke Supabase Storage. Khusus Superadmin (Item #9).",
         "security": [
           {
             "BearerAuth": []
@@ -2639,59 +2646,82 @@
         "requestBody": {
           "required": true,
           "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "example": "PMK No. 48/PMK.03/2026 tentang Tata Cara Pelaporan SPT Masa PPh"
+                  },
+                  "regulation_type": {
+                    "type": "string",
+                    "example": "Peraturan Menteri Keuangan"
+                  },
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Unggah berkas salinan regulasi resmi (Format PDF, Maksimal 10MB)",
+                    "contentMediaType": "application/pdf"
+                  },
+                  "file_type": {
+                    "type": "string",
+                    "enum": [
+                      "PDF"
+                    ],
+                    "default": "PDF",
+                    "description": "Pilihan format jenis berkas input: PDF"
+                  }
+                },
+                "required": [
+                  "title",
+                  "regulation_type",
+                  "file"
+                ]
+              }
+            },
             "application/json": {
               "schema": {
                 "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "example": "PMK No. 48/PMK.03/2026"
+                  },
+                  "regulation_type": {
+                    "type": "string",
+                    "example": "Peraturan Menteri Keuangan"
+                  },
+                  "file_path": {
+                    "type": "string",
+                    "example": "regulations/pmk48.pdf"
+                  },
+                  "file_type": {
+                    "type": "string",
+                    "enum": [
+                      "PDF"
+                    ],
+                    "default": "PDF"
+                  }
+                },
                 "required": [
                   "title",
                   "regulation_type",
                   "file_path"
-                ],
-                "properties": {
-                  "title": {
-                    "type": "string",
-                    "example": "PMK No. 66 Tahun 2023 tentang Perlakuan PPh"
-                  },
-                  "regulation_type": {
-                    "type": "string",
-                    "example": "PMK"
-                  },
-                  "file_path": {
-                    "type": "string",
-                    "example": "regulations/pmk-66-2023.pdf"
-                  },
-                  "file_size": {
-                    "type": "string",
-                    "example": "2.5 MB"
-                  }
-                }
+                ]
               }
             }
           }
         },
         "responses": {
           "201": {
-            "description": "Dokumen regulasi berhasil diunggah",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean",
-                      "example": true
-                    },
-                    "message": {
-                      "type": "string",
-                      "example": "Dokumen regulasi berhasil diunggah"
-                    },
-                    "data": {
-                      "$ref": "#/components/schemas/Regulation"
-                    }
-                  }
-                }
-              }
-            }
+            "description": "Regulasi berhasil ditambahkan"
+          },
+          "400": {
+            "description": "Input data tidak lengkap"
+          },
+          "403": {
+            "description": "Akses dilarang (Khusus Superadmin)"
           }
         }
       }
@@ -2701,8 +2731,8 @@
         "tags": [
           "CMS Admin"
         ],
-        "summary": "Tambah konten edukasi pajak",
-        "description": "Menambahkan artikel atau panduan edukasi pajak baru.",
+        "summary": "Publikasi Materi Edukasi Perpajakan (Khusus Superadmin)",
+        "description": "Menambahkan artikel literasi perpajakan atau buku panduan teknis dengan penambahan foto artikel dan berkas PDF panduan yang dikelola oleh BE (Item Penambahan Foto BE & Item #9).",
         "security": [
           {
             "BearerAuth": []
@@ -2711,22 +2741,17 @@
         "requestBody": {
           "required": true,
           "content": {
-            "application/json": {
+            "multipart/form-data": {
               "schema": {
                 "type": "object",
-                "required": [
-                  "title",
-                  "category",
-                  "body"
-                ],
                 "properties": {
                   "title": {
                     "type": "string",
-                    "example": "Panduan Pengisian SPT Tahunan Badan"
+                    "example": "Panduan Lengkap Kesiapan Transisi Coretax DJP 2026"
                   },
                   "category": {
                     "type": "string",
-                    "example": "Panduan Pajak"
+                    "example": "Kesiapan Coretax"
                   },
                   "content_type": {
                     "type": "string",
@@ -2734,44 +2759,96 @@
                       "ARTICLE",
                       "GUIDE"
                     ],
-                    "example": "GUIDE"
+                    "default": "GUIDE",
+                    "description": "Tipe konten materi"
                   },
                   "body": {
                     "type": "string",
-                    "example": "Berikut langkah-langkah pengisian SPT tahunan badan usaha..."
+                    "example": "Uraian isi edukasi perpajakan secara komprehensif..."
+                  },
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Unggah berkas e-book panduan teknis (Format PDF, Maksimal 10MB)",
+                    "contentMediaType": "application/pdf"
+                  },
+                  "file_type": {
+                    "type": "string",
+                    "enum": [
+                      "PDF"
+                    ],
+                    "default": "PDF",
+                    "description": "Pilihan format jenis berkas panduan: PDF"
+                  },
+                  "image": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Unggah foto / cover materi edukasi (PNG, JPG, WEBP)"
+                  },
+                  "image_url": {
+                    "type": "string",
+                    "example": "https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=800&q=80",
+                    "description": "URL foto cover alternatif jika tidak mengunggah file"
+                  }
+                },
+                "required": [
+                  "title"
+                ]
+              }
+            },
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "example": "Panduan Transisi Coretax DJP"
+                  },
+                  "category": {
+                    "type": "string",
+                    "example": "Kesiapan Coretax"
+                  },
+                  "content_type": {
+                    "type": "string",
+                    "enum": [
+                      "ARTICLE",
+                      "GUIDE"
+                    ],
+                    "default": "ARTICLE"
+                  },
+                  "body": {
+                    "type": "string",
+                    "example": "Isi artikel..."
                   },
                   "file_path": {
                     "type": "string",
-                    "example": "education/panduan-spt-badan.pdf"
+                    "example": "education/panduan_coretax.pdf"
+                  },
+                  "image_url": {
+                    "type": "string",
+                    "example": "https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=800&q=80"
+                  },
+                  "file_type": {
+                    "type": "string",
+                    "enum": [
+                      "PDF"
+                    ],
+                    "default": "PDF"
                   }
-                }
+                },
+                "required": [
+                  "title"
+                ]
               }
             }
           }
         },
         "responses": {
           "201": {
-            "description": "Konten edukasi berhasil dipublikasikan",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean",
-                      "example": true
-                    },
-                    "message": {
-                      "type": "string",
-                      "example": "Konten edukasi berhasil dipublikasikan"
-                    },
-                    "data": {
-                      "$ref": "#/components/schemas/EducationContent"
-                    }
-                  }
-                }
-              }
-            }
+            "description": "Materi edukasi berhasil diterbitkan beserta foto & berkas"
+          },
+          "403": {
+            "description": "Akses dilarang (Khusus Superadmin)"
           }
         }
       }
@@ -2859,8 +2936,8 @@
         "tags": [
           "CMS Admin"
         ],
-        "summary": "Daftar lamaran kerja pelamar",
-        "description": "Menampilkan seluruh lamaran yang masuk beserta info posisi yang dilamar.",
+        "summary": "Daftar Lamaran Kerja Masuk & Tautan CV",
+        "description": "Admin meninjau pelamar kerja beserta signed URL untuk mengunduh berkas CV langsung dari Supabase Storage.",
         "security": [
           {
             "BearerAuth": []
@@ -2868,30 +2945,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Berhasil memuat daftar lamaran pelamar",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean",
-                      "example": true
-                    },
-                    "message": {
-                      "type": "string",
-                      "example": "Berhasil memuat daftar lamaran pelamar"
-                    },
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/JobApplication"
-                      }
-                    }
-                  }
-                }
-              }
-            }
+            "description": "Daftar lamaran kerja berhasil dimuat"
           }
         }
       }
@@ -2939,7 +2993,7 @@
           "Public CMS"
         ],
         "summary": "Katalog layanan publik",
-        "description": "Menampilkan daftar layanan konsultasi yang aktif.",
+        "description": "Memuat seluruh katalog layanan aktif lengkap dengan card penjelasan yang dikelola dari BE, daftar fitur/cakupan, dan tombol konsultasi yang mengarah langsung ke WhatsApp resmi Zhou Consulting (Item #17 & #18 Revisi FE).",
         "responses": {
           "200": {
             "description": "Berhasil memuat katalog layanan",
@@ -3084,36 +3138,13 @@
     "/api/v1/public/careers": {
       "get": {
         "tags": [
-          "Public CMS"
+          "Public"
         ],
-        "summary": "Lowongan karir aktif",
-        "description": "Menampilkan seluruh lowongan kerja yang masih aktif.",
+        "summary": "Daftar Lowongan Karir Aktif",
+        "description": "Mengambil lowongan pekerjaan aktif beserta informasi format berkas yang diperbolehkan (PDF, DOCX, DOC maks 5MB).",
         "responses": {
           "200": {
-            "description": "Berhasil memuat lowongan karir",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean",
-                      "example": true
-                    },
-                    "message": {
-                      "type": "string",
-                      "example": "Berhasil memuat lowongan karir"
-                    },
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/CareerJob"
-                      }
-                    }
-                  }
-                }
-              }
-            }
+            "description": "Daftar lowongan kerja berhasil dimuat"
           }
         }
       }
@@ -3123,31 +3154,72 @@
         "tags": [
           "Public CMS"
         ],
-        "summary": "Melamar lowongan kerja",
-        "description": "Mengirimkan lamaran kerja untuk posisi tertentu. Email konfirmasi akan dikirim secara otomatis via Resend.",
+        "summary": "Kirim Lamaran Karir & Unggah CV (Publik / Tanpa Login)",
+        "description": "Pengunjung dapat melamar lowongan kerja aktif tanpa autentikasi (Item #6). Dalam lowongan yang sama, satu alamat email hanya dapat mengirimkan satu lamaran (Item #7). Berkas CV disimpan ke folder cvs Supabase Storage.",
         "parameters": [
           {
             "name": "id",
             "in": "path",
             "required": true,
-            "description": "ID lowongan kerja",
             "schema": {
-              "type": "integer",
-              "example": 1
-            }
+              "type": "integer"
+            },
+            "description": "ID Lowongan Pekerjaan Aktif"
           }
         ],
         "requestBody": {
           "required": true,
           "content": {
-            "application/json": {
+            "multipart/form-data": {
               "schema": {
                 "type": "object",
+                "properties": {
+                  "applicant_name": {
+                    "type": "string",
+                    "example": "Budi Santoso",
+                    "description": "Nama lengkap pelamar"
+                  },
+                  "applicant_email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "budi.santoso@example.com",
+                    "description": "Alamat email aktif (dibatasi 1 lamaran per lowongan)"
+                  },
+                  "applicant_phone": {
+                    "type": "string",
+                    "example": "+6281234567890",
+                    "description": "Nomor WhatsApp / telepon"
+                  },
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Unggah berkas CV pelamar (Format PDF, Maksimal 10MB)",
+                    "contentMediaType": "application/pdf"
+                  },
+                  "file_type": {
+                    "type": "string",
+                    "enum": [
+                      "PDF"
+                    ],
+                    "default": "PDF",
+                    "description": "Pilihan jenis format file input: PDF"
+                  },
+                  "cv_file_path": {
+                    "type": "string",
+                    "example": "cvs/cv-budi.pdf",
+                    "description": "Path Supabase Storage (opsional jika upload file fisik)"
+                  }
+                },
                 "required": [
                   "applicant_name",
                   "applicant_email",
-                  "cv_file_path"
-                ],
+                  "file"
+                ]
+              }
+            },
+            "application/json": {
+              "schema": {
+                "type": "object",
                 "properties": {
                   "applicant_name": {
                     "type": "string",
@@ -3155,8 +3227,7 @@
                   },
                   "applicant_email": {
                     "type": "string",
-                    "format": "email",
-                    "example": "budi@email.com"
+                    "example": "budi.santoso@example.com"
                   },
                   "applicant_phone": {
                     "type": "string",
@@ -3164,46 +3235,34 @@
                   },
                   "cv_file_path": {
                     "type": "string",
-                    "example": "careers/cv-budi-santoso.pdf"
+                    "example": "cvs/cv-budi.pdf"
+                  },
+                  "file_type": {
+                    "type": "string",
+                    "enum": [
+                      "PDF"
+                    ],
+                    "default": "PDF"
                   }
-                }
+                },
+                "required": [
+                  "applicant_name",
+                  "applicant_email",
+                  "cv_file_path"
+                ]
               }
             }
           }
         },
         "responses": {
           "201": {
-            "description": "Lamaran kerja berhasil dikirimkan dan konfirmasi telah dikirim via email",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean",
-                      "example": true
-                    },
-                    "message": {
-                      "type": "string",
-                      "example": "Lamaran kerja berhasil dikirimkan dan konfirmasi telah dikirim via email"
-                    },
-                    "data": {
-                      "$ref": "#/components/schemas/JobApplication"
-                    }
-                  }
-                }
-              }
-            }
+            "description": "Lamaran kerja berhasil dikirimkan"
           },
           "400": {
-            "description": "Data biodata dan file CV wajib diisi",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
+            "description": "Validasi gagal (email sudah pernah melamar atau berkas CV tidak ada)"
+          },
+          "404": {
+            "description": "Lowongan pekerjaan tidak ditemukan"
           }
         }
       }
@@ -3567,12 +3626,12 @@
       }
     },
     "/api/v1/superadmin/admins/{id}": {
-      "delete": {
+      "put": {
         "tags": [
           "Superadmin"
         ],
-        "summary": "Hapus permanen akun admin",
-        "description": "Menghapus akun admin secara permanen. Hanya bisa dilakukan jika admin tidak memiliki riwayat pekerjaan/audit trail. Jika ada riwayat, gunakan nonaktifkan (soft delete) saja.",
+        "summary": "Superadmin Memperbarui Akun Staf Admin (Kelola Admin)",
+        "description": "Superadmin dapat mengelola admin-admin dengan mengubah nama lengkap, email, nomor telepon, peran (ADMIN/SUPERADMIN), kata sandi, dan status aktif.",
         "security": [
           {
             "BearerAuth": []
@@ -3583,43 +3642,62 @@
             "name": "id",
             "in": "path",
             "required": true,
-            "description": "ID akun admin yang akan dihapus",
             "schema": {
-              "type": "integer",
-              "example": 4
-            }
+              "type": "integer"
+            },
+            "description": "ID Akun Admin yang diperbarui"
           }
         ],
-        "responses": {
-          "200": {
-            "description": "Akun staf tanpa riwayat berhasil dihapus permanen",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean",
-                      "example": true
-                    },
-                    "message": {
-                      "type": "string",
-                      "example": "Akun staf tanpa riwayat berhasil dihapus permanen"
-                    }
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "example": "Konsultan Madya Zhou"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "konsultan.madya@zhouconsulting.com"
+                  },
+                  "phone": {
+                    "type": "string",
+                    "example": "+6281298887766"
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "ADMIN",
+                      "SUPERADMIN"
+                    ],
+                    "example": "ADMIN"
+                  },
+                  "is_active": {
+                    "type": "boolean",
+                    "example": true
+                  },
+                  "password": {
+                    "type": "string",
+                    "example": "PasswordBaru123!"
                   }
                 }
               }
             }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Data staf admin berhasil diperbarui"
           },
-          "400": {
-            "description": "Tidak bisa menghapus akun sendiri / akun memiliki riwayat audit trail",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
+          "403": {
+            "description": "Khusus Superadmin"
+          },
+          "404": {
+            "description": "Admin tidak ditemukan"
           }
         }
       }
@@ -3914,11 +3992,46 @@
                   "file": {
                     "type": "string",
                     "format": "binary",
-                    "description": "Berkas dokumen (Maks 5MB)"
+                    "description": "Unggah berkas fisik dokumen (Format PDF, Maksimal 10MB)",
+                    "contentMediaType": "application/pdf"
+                  },
+                  "file_type": {
+                    "type": "string",
+                    "enum": [
+                      "PDF"
+                    ],
+                    "default": "PDF",
+                    "description": "Pilihan format jenis berkas input: PDF"
                   },
                   "file_name": {
                     "type": "string",
+                    "example": "Laporan_Keuangan_Klien.pdf",
+                    "description": "Nama berkas dokumen"
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            },
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file_name": {
+                    "type": "string",
                     "example": "Laporan_Keuangan_Klien.pdf"
+                  },
+                  "file_path": {
+                    "type": "string",
+                    "example": "documents/klien/Laporan_Keuangan.pdf"
+                  },
+                  "file_type": {
+                    "type": "string",
+                    "enum": [
+                      "PDF"
+                    ],
+                    "default": "PDF"
                   }
                 }
               }
@@ -4136,6 +4249,35 @@
         "requestBody": {
           "required": true,
           "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "example": "PMK No. 48/PMK.03/2026 (Revisi)"
+                  },
+                  "regulation_type": {
+                    "type": "string",
+                    "example": "Peraturan Menteri Keuangan"
+                  },
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Unggah salinan dokumen revisi regulasi (Format PDF)",
+                    "contentMediaType": "application/pdf"
+                  },
+                  "file_type": {
+                    "type": "string",
+                    "enum": [
+                      "PDF"
+                    ],
+                    "default": "PDF",
+                    "description": "Pilihan format jenis berkas input: PDF"
+                  }
+                }
+              }
+            },
             "application/json": {
               "schema": {
                 "type": "object",
@@ -4150,11 +4292,14 @@
                   },
                   "file_path": {
                     "type": "string",
-                    "example": "documents/regulasi_pmk48.pdf"
+                    "example": "regulations/pmk48.pdf"
                   },
-                  "file_size": {
+                  "file_type": {
                     "type": "string",
-                    "example": "1.2 MB"
+                    "enum": [
+                      "PDF"
+                    ],
+                    "default": "PDF"
                   }
                 }
               }
@@ -4218,29 +4363,93 @@
         "requestBody": {
           "required": true,
           "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "example": "Panduan Lengkap Kesiapan Transisi Coretax DJP (Update)"
+                  },
+                  "category": {
+                    "type": "string",
+                    "example": "Kesiapan Coretax"
+                  },
+                  "content_type": {
+                    "type": "string",
+                    "enum": [
+                      "ARTICLE",
+                      "GUIDE"
+                    ],
+                    "default": "GUIDE"
+                  },
+                  "body": {
+                    "type": "string",
+                    "example": "Pembaruan materi edukasi..."
+                  },
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Unggah berkas revisi panduan (Format PDF)",
+                    "contentMediaType": "application/pdf"
+                  },
+                  "file_type": {
+                    "type": "string",
+                    "enum": [
+                      "PDF"
+                    ],
+                    "default": "PDF",
+                    "description": "Pilihan format jenis berkas input: PDF"
+                  },
+                  "image": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Unggah foto cover materi baru"
+                  },
+                  "image_url": {
+                    "type": "string",
+                    "example": "https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=800&q=80"
+                  }
+                }
+              }
+            },
             "application/json": {
               "schema": {
                 "type": "object",
                 "properties": {
                   "title": {
                     "type": "string",
-                    "example": "Panduan Praktis SPT Badan 2026"
+                    "example": "Panduan Coretax (Update)"
                   },
                   "category": {
                     "type": "string",
-                    "example": "PPh Badan"
+                    "example": "Kesiapan Coretax"
                   },
                   "content_type": {
                     "type": "string",
-                    "example": "ARTICLE"
+                    "enum": [
+                      "ARTICLE",
+                      "GUIDE"
+                    ]
                   },
                   "body": {
                     "type": "string",
-                    "example": "Isi artikel edukasi..."
+                    "example": "Pembaruan isi..."
                   },
                   "file_path": {
                     "type": "string",
-                    "example": "documents/guide_spt.pdf"
+                    "example": "education/panduan.pdf"
+                  },
+                  "image_url": {
+                    "type": "string",
+                    "example": "https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=800&q=80"
+                  },
+                  "file_type": {
+                    "type": "string",
+                    "enum": [
+                      "PDF"
+                    ],
+                    "default": "PDF"
                   }
                 }
               }
@@ -4602,6 +4811,786 @@
         "responses": {
           "200": {
             "description": "Sesi berhasil dihentikan"
+          }
+        }
+      }
+    },
+    "/api/v1/careers": {
+      "get": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "Daftar Lowongan Karir Aktif",
+        "description": "Mengambil lowongan pekerjaan aktif beserta informasi format berkas yang diperbolehkan (PDF, DOCX, DOC maks 5MB).",
+        "responses": {
+          "200": {
+            "description": "Daftar lowongan kerja berhasil dimuat"
+          }
+        }
+      }
+    },
+    "/api/v1/public/careers/{id}": {
+      "get": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "Detail Lowongan Karir",
+        "description": "Mengambil rincian lowongan pekerjaan berdasarkan ID beserta ketentuan unggah berkas CV.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Detail lowongan berhasil dimuat"
+          },
+          "404": {
+            "description": "Lowongan tidak ditemukan"
+          }
+        }
+      }
+    },
+    "/api/v1/careers/{id}": {
+      "get": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "Detail Lowongan Karir",
+        "description": "Mengambil rincian lowongan pekerjaan berdasarkan ID beserta ketentuan unggah berkas CV.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Detail lowongan berhasil dimuat"
+          },
+          "404": {
+            "description": "Lowongan tidak ditemukan"
+          }
+        }
+      }
+    },
+    "/api/v1/careers/{id}/apply": {
+      "post": {
+        "tags": [
+          "Public CMS"
+        ],
+        "summary": "Kirim Lamaran Karir & Unggah CV (Publik / Tanpa Login)",
+        "description": "Pengunjung dapat melamar lowongan kerja aktif tanpa autentikasi (Item #6). Dalam lowongan yang sama, satu alamat email hanya dapat mengirimkan satu lamaran (Item #7). Berkas CV disimpan ke folder cvs Supabase Storage.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "ID Lowongan Pekerjaan Aktif"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "applicant_name": {
+                    "type": "string",
+                    "example": "Budi Santoso",
+                    "description": "Nama lengkap pelamar"
+                  },
+                  "applicant_email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "budi.santoso@example.com",
+                    "description": "Alamat email aktif (dibatasi 1 lamaran per lowongan)"
+                  },
+                  "applicant_phone": {
+                    "type": "string",
+                    "example": "+6281234567890",
+                    "description": "Nomor WhatsApp / telepon"
+                  },
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Unggah berkas CV pelamar (Format PDF, Maksimal 10MB)",
+                    "contentMediaType": "application/pdf"
+                  },
+                  "file_type": {
+                    "type": "string",
+                    "enum": [
+                      "PDF"
+                    ],
+                    "default": "PDF",
+                    "description": "Pilihan jenis format file input: PDF"
+                  },
+                  "cv_file_path": {
+                    "type": "string",
+                    "example": "cvs/cv-budi.pdf",
+                    "description": "Path Supabase Storage (opsional jika upload file fisik)"
+                  }
+                },
+                "required": [
+                  "applicant_name",
+                  "applicant_email",
+                  "file"
+                ]
+              }
+            },
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "applicant_name": {
+                    "type": "string",
+                    "example": "Budi Santoso"
+                  },
+                  "applicant_email": {
+                    "type": "string",
+                    "example": "budi.santoso@example.com"
+                  },
+                  "applicant_phone": {
+                    "type": "string",
+                    "example": "+6281234567890"
+                  },
+                  "cv_file_path": {
+                    "type": "string",
+                    "example": "cvs/cv-budi.pdf"
+                  },
+                  "file_type": {
+                    "type": "string",
+                    "enum": [
+                      "PDF"
+                    ],
+                    "default": "PDF"
+                  }
+                },
+                "required": [
+                  "applicant_name",
+                  "applicant_email",
+                  "cv_file_path"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Lamaran kerja berhasil dikirimkan"
+          },
+          "400": {
+            "description": "Validasi gagal (email sudah pernah melamar atau berkas CV tidak ada)"
+          },
+          "404": {
+            "description": "Lowongan pekerjaan tidak ditemukan"
+          }
+        }
+      }
+    },
+    "/api/v1/public/upload": {
+      "post": {
+        "tags": [
+          "Public CMS"
+        ],
+        "summary": "Unggah Berkas ke Supabase Storage (Mendukung PDF)",
+        "description": "Endpoint universal untuk mengunggah berkas fisik (PDF, dokumen kerja, CV, gambar) langsung ke Supabase Storage.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Unggah berkas fisik dokumen (Format PDF, Maksimal 10MB)",
+                    "contentMediaType": "application/pdf"
+                  },
+                  "file_type": {
+                    "type": "string",
+                    "enum": [
+                      "PDF"
+                    ],
+                    "default": "PDF",
+                    "description": "Pilihan format jenis berkas input: PDF"
+                  },
+                  "folder": {
+                    "type": "string",
+                    "example": "documents",
+                    "description": "Folder target di Supabase: documents, cvs, education, regulations"
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Berkas berhasil diunggah"
+          }
+        }
+      }
+    },
+    "/api/v1/upload": {
+      "post": {
+        "tags": [
+          "Public CMS"
+        ],
+        "summary": "Unggah Berkas ke Supabase Storage (Mendukung PDF)",
+        "description": "Endpoint universal untuk mengunggah berkas fisik (PDF, dokumen kerja, CV, gambar) langsung ke Supabase Storage.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Unggah berkas fisik dokumen (Format PDF, Maksimal 10MB)",
+                    "contentMediaType": "application/pdf"
+                  },
+                  "file_type": {
+                    "type": "string",
+                    "enum": [
+                      "PDF"
+                    ],
+                    "default": "PDF",
+                    "description": "Pilihan format jenis berkas input: PDF"
+                  },
+                  "folder": {
+                    "type": "string",
+                    "example": "documents",
+                    "description": "Folder target di Supabase: documents, cvs, education, regulations"
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Berkas berhasil diunggah"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/cms/job-applications/{id}/download": {
+      "get": {
+        "tags": [
+          "CMS Admin"
+        ],
+        "summary": "Unduh Berkas CV Pelamar Kerja (Signed URL Supabase)",
+        "description": "Menghasilkan tautan unduh berbatas waktu (signed URL 1 jam) dari Supabase Storage untuk berkas CV pelamar tertentu.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "ID data lamaran kerja (job_application id)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Signed URL CV pelamar berhasil digenerate"
+          },
+          "404": {
+            "description": "Berkas CV atau lamaran tidak ditemukan"
+          }
+        }
+      }
+    },
+    "/api/v1/public/education/{id}": {
+      "get": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "Detail Konten Edukasi Perpajakan",
+        "description": "Mengambil detail artikel atau materi panduan edukasi pajak beserta tautan berkas dari Supabase Storage.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "ID konten edukasi"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Detail edukasi berhasil dimuat"
+          },
+          "404": {
+            "description": "Materi edukasi tidak ditemukan"
+          }
+        }
+      }
+    },
+    "/api/v1/education/{id}": {
+      "get": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "Detail Konten Edukasi Perpajakan",
+        "description": "Mengambil detail artikel atau materi panduan edukasi pajak beserta tautan berkas dari Supabase Storage.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "ID konten edukasi"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Detail edukasi berhasil dimuat"
+          },
+          "404": {
+            "description": "Materi edukasi tidak ditemukan"
+          }
+        }
+      }
+    },
+    "/api/v1/public/education/{id}/download": {
+      "get": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "Unduh Berkas Materi Panduan Edukasi (Signed URL)",
+        "description": "Mendapatkan signed URL Supabase Storage berbatas waktu untuk mengunduh lampiran materi/panduan edukasi.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "ID konten edukasi"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tautan unduh berkas edukasi berhasil dibuat"
+          },
+          "404": {
+            "description": "Berkas materi edukasi tidak ditemukan"
+          }
+        }
+      }
+    },
+    "/api/v1/education/{id}/download": {
+      "get": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "Unduh Berkas Materi Panduan Edukasi (Signed URL)",
+        "description": "Mendapatkan signed URL Supabase Storage berbatas waktu untuk mengunduh lampiran materi/panduan edukasi.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "ID konten edukasi"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tautan unduh berkas edukasi berhasil dibuat"
+          },
+          "404": {
+            "description": "Berkas materi edukasi tidak ditemukan"
+          }
+        }
+      }
+    },
+    "/api/v1/public/regulations/{id}": {
+      "get": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "Detail Regulasi Perpajakan",
+        "description": "Mengambil informasi lengkap regulasi beserta tautan berkas resmi perpajakan dari Supabase Storage.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "ID regulasi pajak"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Detail regulasi berhasil dimuat"
+          },
+          "404": {
+            "description": "Dokumen regulasi tidak ditemukan"
+          }
+        }
+      }
+    },
+    "/api/v1/regulations/{id}": {
+      "get": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "Detail Regulasi Perpajakan",
+        "description": "Mengambil informasi lengkap regulasi beserta tautan berkas resmi perpajakan dari Supabase Storage.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "ID regulasi pajak"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Detail regulasi berhasil dimuat"
+          },
+          "404": {
+            "description": "Dokumen regulasi tidak ditemukan"
+          }
+        }
+      }
+    },
+    "/api/v1/public/regulations/{id}/download": {
+      "get": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "Unduh Berkas Regulasi Pajak (Signed URL)",
+        "description": "Mendapatkan signed URL Supabase Storage berbatas waktu untuk mengunduh salinan berkas resmi regulasi pajak.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "ID regulasi pajak"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tautan unduh regulasi berhasil digenerate"
+          },
+          "404": {
+            "description": "Berkas regulasi tidak ditemukan"
+          }
+        }
+      }
+    },
+    "/api/v1/regulations/{id}/download": {
+      "get": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "Unduh Berkas Regulasi Pajak (Signed URL)",
+        "description": "Mendapatkan signed URL Supabase Storage berbatas waktu untuk mengunduh salinan berkas resmi regulasi pajak.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "ID regulasi pajak"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tautan unduh regulasi berhasil digenerate"
+          },
+          "404": {
+            "description": "Berkas regulasi tidak ditemukan"
+          }
+        }
+      }
+    },
+    "/api/v1/public/chatbot/tree": {
+      "get": {
+        "tags": [
+          "Public CMS"
+        ],
+        "summary": "Pohon Keputusan FAQ Chatbot Bantuan (Publik / Landing Page / Kontak)",
+        "description": "Chatbot ditujukan untuk pengunjung baru di landing page atau halaman kontak tanpa perlu autentikasi/login (Item #5 Revisi FE).",
+        "responses": {
+          "200": {
+            "description": "Pohon keputusan chatbot berhasil dimuat",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Pohon keputusan chatbot berhasil dimuat"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "example": 1
+                          },
+                          "category": {
+                            "type": "string",
+                            "example": "LAYANAN"
+                          },
+                          "question": {
+                            "type": "string",
+                            "example": "Layanan apa saja yang disediakan Zhou Consulting?"
+                          },
+                          "answer_template": {
+                            "type": "string",
+                            "example": "Kami menyediakan Tax Service Core & Kesiapan Coretax, Accounting Service..."
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/chatbot": {
+      "get": {
+        "tags": [
+          "Public CMS"
+        ],
+        "summary": "Pohon Keputusan FAQ Chatbot Bantuan (Publik / Landing Page / Kontak)",
+        "description": "Chatbot ditujukan untuk pengunjung baru di landing page atau halaman kontak tanpa perlu autentikasi/login (Item #5 Revisi FE).",
+        "responses": {
+          "200": {
+            "description": "Pohon keputusan chatbot berhasil dimuat",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Pohon keputusan chatbot berhasil dimuat"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "example": 1
+                          },
+                          "category": {
+                            "type": "string",
+                            "example": "LAYANAN"
+                          },
+                          "question": {
+                            "type": "string",
+                            "example": "Layanan apa saja yang disediakan Zhou Consulting?"
+                          },
+                          "answer_template": {
+                            "type": "string",
+                            "example": "Kami menyediakan Tax Service Core & Kesiapan Coretax, Accounting Service..."
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/consultations/{id}": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Detail Perikatan Konsultasi & Lembar Kerja (Admin PIC & Superadmin)",
+        "description": "Menampilkan detail lengkap perikatan konsultasi, checklist penugasan, repositori dokumen dengan signed URL, serta informasi PIC Admin. Admin hanya dapat melihat tiket jika menjadi PIC yang ditugaskan; Superadmin dapat melihat seluruh tiket (Item #14).",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "ID Lembar Kerja Konsultasi"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Detail konsultasi berhasil dimuat"
+          },
+          "403": {
+            "description": "Akses ditolak: Anda bukan PIC yang ditugaskan untuk tiket ini"
+          },
+          "404": {
+            "description": "Perikatan tidak ditemukan"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/consultations/{id}/assign": {
+      "patch": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Superadmin Menugaskan / Mengalihkan PIC Tiket Konsultasi",
+        "description": "Superadmin menugaskan tiket ke PIC Admin tertentu dan menyediakan kemampuan mengubah penugasan (reassign) ke PIC Admin lain (Item #13 & #15 Revisi FE). Tindakan dicatat otomatis ke database append-only audit log.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "ID Lembar Kerja Konsultasi"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "assigned_admin_id": {
+                    "type": "integer",
+                    "example": 2,
+                    "description": "ID staf admin yang ditugaskan sebagai PIC"
+                  }
+                },
+                "required": [
+                  "assigned_admin_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tiket berhasil ditugaskan / dialihkan ke PIC baru"
+          },
+          "400": {
+            "description": "ID admin tidak valid"
+          },
+          "403": {
+            "description": "Khusus Superadmin"
+          },
+          "404": {
+            "description": "Tiket atau admin tidak ditemukan"
+          }
+        }
+      }
+    },
+    "/api/v1/superadmin/admins/{id}/reactivate": {
+      "post": {
+        "tags": [
+          "Superadmin"
+        ],
+        "summary": "Superadmin Mengaktifkan Kembali Akun Staf Admin",
+        "description": "Mengaktifkan kembali akun staf admin yang sebelumnya dinonaktifkan dan menghapus pencabutan sesi dari Redis blacklist.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "ID Akun Admin yang diaktifkan kembali"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Akun staf admin berhasil diaktifkan kembali"
+          },
+          "403": {
+            "description": "Khusus Superadmin"
+          },
+          "404": {
+            "description": "Admin tidak ditemukan"
           }
         }
       }

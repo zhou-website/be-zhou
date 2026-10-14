@@ -2,6 +2,9 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../config/database.js';
 import { sendSuccess, sendError } from '../utils/response.js';
+import { uploadFileToStorage } from '../services/storage.service.js';
+import { getUploadedFile } from '../middlewares/upload.middleware.js';
+
 
 export const getProfile = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -55,7 +58,8 @@ export const getProfile = async (req: Request, res: Response): Promise<void> => 
 export const updateProfile = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.user?.id;
-    const { name, phone, company_name, avatar_url, current_password, new_password } = req.body || {};
+    const body = req.body || {};
+    let { name, phone, company_name, avatar_url, current_password, new_password } = body;
 
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
@@ -63,11 +67,18 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
+    const file = getUploadedFile(req);
+    if (file) {
+      const uploadResult = await uploadFileToStorage(file.originalname, file.buffer, file.mimetype, 'avatars');
+      avatar_url = uploadResult.publicUrl || uploadResult.filePath;
+    }
+
     const updateData: Record<string, unknown> = {};
     if (name) updateData.name = name;
     if (phone !== undefined) updateData.phone = phone;
     if (company_name !== undefined) updateData.company_name = company_name;
     if (avatar_url !== undefined) updateData.avatar_url = avatar_url;
+
 
     // Ganti password jika diminta
     if (new_password) {
