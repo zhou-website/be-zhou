@@ -7,10 +7,11 @@ import {
   downloadDocument,
   getChatbotTree,
   escalateChatbot,
+  createClientConsultation,
   uploadClientDocument,
 } from '../controllers/client.controller.js';
 import { requireAuth, requireRole } from '../middlewares/auth.middleware.js';
-import { consultationDocUploadMiddleware } from '../middlewares/upload.middleware.js';
+import { consultationDocUploadMiddleware, flexibleUploadMiddleware } from '../middlewares/upload.middleware.js';
 
 const router = Router();
 
@@ -22,6 +23,7 @@ router.use(requireAuth, requireRole('USER', 'ADMIN', 'SUPERADMIN'));
 
 router.get('/dashboard/overview', getDashboardOverview);
 router.get('/consultations', getConsultations);
+router.post('/consultations', flexibleUploadMiddleware, createClientConsultation);
 router.get('/consultations/:id', getConsultationDetail);
 router.post('/consultations/:id/documents', consultationDocUploadMiddleware, uploadClientDocument);
 

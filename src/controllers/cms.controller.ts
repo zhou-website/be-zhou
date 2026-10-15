@@ -926,19 +926,196 @@ export const getContactSettings = async (_req: Request, res: Response): Promise<
 
 export const submitContactMessage = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, email, message } = req.body || {};
+    const { name, email, message, phone, company, company_name } = req.body || {};
     if (!name || !email || !message) {
       sendError(res, 400, 'Nama, email, dan pesan wajib diisi');
       return;
     }
 
-    // Response konfirmasi pesan
-    sendSuccess(res, 200, 'Pesan pertanyaan Anda telah terkirim ke customer service kami', {
+    const cleanEmail = String(email).toLowerCase().trim();
+    const clientCompany = company_name || company || 'Perusahaan Klien';
+
+    // Cari atau buat akun klien untuk mencatat histori pesan
+    let clientUser = await prisma.user.findUnique({ where: { email: cleanEmail } });
+    if (!clientUser) {
+      clientUser = await prisma.user.create({
+        data: {
+          name: String(name).trim(),
+          email: cleanEmail,
+          password_hash: 'PUBLIC_INQUIRY_CLIENT',
+          role: 'USER',
+          phone: phone ? String(phone) : null,
+          company_name: clientCompany,
+        },
+      });
+    }
+
+    const defaultService = (await prisma.service.findFirst())?.id || 1;
+    const randNum = Math.floor(1000 + Math.random() * 9000);
+    const code = `ZHOU-INQ-${Date.now().toString().slice(-4)}-${randNum}`;
+
+    const newProject = await prisma.consultationProject.create({
+      data: {
+        project_code: code,
+        client_id: clientUser.id,
+        service_id: defaultService,
+        title: `Inquiry Pesan Kontak: ${name}`,
+        description: `Pesan Konsultasi / Inquiry Masuk dari Web:
+Pengirim: ${name} (${cleanEmail})
+Telepon: ${phone || '-'}
+Perusahaan: ${clientCompany}
+Pesan Klien:
+${message}`,
+        status: 'IN_PROGRESS',
+        progress_percent: 15,
+        tasks: {
+          create: [
+            { task_name: 'Penerimaan Inquiry Formulir Kontak', is_completed: true },
+            { task_name: 'Penugasan PIC Konsultan / Tindak Lanjut Customer Service', is_completed: false },
+          ],
+        },
+      },
+      include: {
+        client: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            company_name: true,
+          },
+        },
+      },
+    });
+
+    sendSuccess(res, 200, 'Pesan pertanyaan Anda telah terkirim dan tercatat di sistem konsultasi Zhou Consulting', {
       received_at: new Date().toISOString(),
       status: 'SENT',
+      project_code: code,
+      project_id: newProject.id,
     });
   } catch (error) {
     sendError(res, 500, 'Gagal mengirim pesan kontak', (error as Error).message);
+  }
+};
+
+export const submitPublicConsultation = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { name, email, phone, company, company_name, service_id, category, title, description, urgency, priority } = req.body || {};
+
+    if (!name || !email || !title) {
+      sendError(res, 400, 'Nama, email, dan kebutuhan permohonan konsultasi wajib diisi');
+      return;
+    }
+
+    const cleanEmail = String(email).toLowerCase().trim();
+    const clientCompany = company_name || company || 'Perusahaan Klien';
+
+    let clientUser = await prisma.user.findUnique({ where: { email: cleanEmail } });
+    if (!clientUser) {
+      clientUser = await prisma.user.create({
+        data: {
+          name: String(name).trim(),
+          email: cleanEmail,
+          password_hash: 'PUBLIC_FORM_CLIENT',
+          role: 'USER',
+          phone: phone ? String(phone) : null,
+          company_name: clientCompany,
+        },
+      });
+    }
+
+    let resolvedServiceId = service_id ? Number(service_id) : undefined;
+    if (!resolvedServiceId && category) {
+      const catLower = category.toLowerCase();
+      const matched = await prisma.service.findFirst({
+        where: {
+          OR: [
+            { category: { contains: catLower, mode: 'insensitive' } },
+            { service_name: { contains: catLower, mode: 'insensitive' } },
+          ],
+        },
+      });
+      if (matched) resolvedServiceId = matched.id;
+    }
+    if (!resolvedServiceId) {
+      const firstSvc = await prisma.service.findFirst();
+      resolvedServiceId = firstSvc ? firstSvc.id : 1;
+    }
+
+    const randNum = Math.floor(1000 + Math.random() * 9000);
+    const code = `ZHOU-PB-${Date.now().toString().slice(-4)}-${randNum}`;
+    const selectedPriority = urgency || priority || 'Normal';
+
+    const fullDescription = `Permohonan Konsultasi Publik:
+Pengirim: ${name} (${cleanEmail})
+Telepon: ${phone || '-'}
+Perusahaan: ${clientCompany}
+Kategori: ${category || 'Tax Service Core'}
+Urgensi: ${selectedPriority}
+Rincian Masalah:
+${description || title}`;
+
+    const newProject = await prisma.consultationProject.create({
+      data: {
+        project_code: code,
+        client_id: clientUser.id,
+        service_id: resolvedServiceId,
+        title: title.trim(),
+        description: fullDescription,
+        status: 'IN_PROGRESS',
+        progress_percent: 15,
+        tasks: {
+          create: [
+            { task_name: 'Intake & Verifikasi Berkas Awal', is_completed: true },
+            { task_name: 'Penetapan Konsultan PIC & Divisi Terkait', is_completed: false },
+            { task_name: 'Analisis & Pengerjaan Lembar Kerja Fiskal', is_completed: false },
+            { task_name: 'Finalisasi & Penyampaian Hasil Konsultasi', is_completed: false },
+          ],
+        },
+      },
+      include: {
+        client: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            company_name: true,
+            phone: true,
+          },
+        },
+        service: true,
+        tasks: true,
+        documents: true,
+      },
+    });
+
+    // Handle optional file
+    const file = getUploadedFile(req);
+    if (file) {
+      try {
+        const uploadResult = await uploadFileToStorage(file.originalname, file.buffer, file.mimetype, 'documents');
+        const ext = path.extname(file.originalname).toLowerCase();
+        const detected = ext.includes('xls') ? 'XLSX' : ext.includes('doc') ? 'DOCX' : 'PDF';
+
+        const doc = await prisma.projectDocument.create({
+          data: {
+            project_id: newProject.id,
+            file_name: file.originalname,
+            file_path: uploadResult.filePath,
+            file_size: `${(file.size / 1024).toFixed(1)} KB`,
+            file_type: detected,
+            uploaded_by: clientUser.id,
+          },
+        });
+        (newProject.documents as any[]).push(doc);
+      } catch (uploadErr) {
+        console.warn('⚠️ Gagal mengunggah berkas permohonan konsultasi publik:', (uploadErr as Error).message);
+      }
+    }
+
+    sendSuccess(res, 201, 'Permohonan konsultasi berhasil dikirim dan terdaftar di Zhou Consulting', newProject);
+  } catch (error) {
+    sendError(res, 500, 'Gagal memproses permohonan konsultasi publik', (error as Error).message);
   }
 };
 

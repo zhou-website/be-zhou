@@ -14,6 +14,7 @@ import {
   applyCareer,
   getContactSettings,
   submitContactMessage,
+  submitPublicConsultation,
   uploadPublicFile,
 } from '../controllers/cms.controller.js';
 
@@ -46,9 +47,10 @@ router.post('/careers/:id/apply', flexibleUploadMiddleware, applyCareer);
 // Public File Upload Helper (misal upload CV, berkas edukasi, atau formulir publik ke Supabase Storage)
 router.post('/upload', flexibleUploadMiddleware, uploadPublicFile);
 
-// Contact & Settings
+// Contact & Settings & Public Consultations
 router.get('/settings/contact', getContactSettings);
 router.post('/contact', validate(contactFormSchema), submitContactMessage);
+router.post('/consultations', flexibleUploadMiddleware, submitPublicConsultation);
 
 // Chatbot Decision Tree untuk pengunjung baru / landing page / kontak (Item #5 Revisi FE)
 router.get('/chatbot/tree', getChatbotTree);

@@ -75,6 +75,15 @@ export const getConsultations = async (req: Request, res: Response): Promise<voi
     const projects = await prisma.consultationProject.findMany({
       where: whereCondition,
       include: {
+        client: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            company_name: true,
+            phone: true,
+          },
+        },
         service: {
           select: {
             service_code: true,
@@ -110,16 +119,33 @@ export const getConsultations = async (req: Request, res: Response): Promise<voi
       orderBy: { updated_at: 'desc' },
     });
 
-    sendSuccess(res, 200, 'Berhasil memuat daftar perikatan konsultasi', projects);
+    const safeProjects = projects.map((p) => ({
+      ...p,
+      client: p.client
+        ? {
+            ...p.client,
+            company_name: p.client.company_name || p.client.name || 'Perusahaan Klien',
+          }
+        : undefined,
+    }));
+
+    sendSuccess(res, 200, 'Berhasil memuat daftar perikatan konsultasi', safeProjects);
   } catch (error) {
     console.warn('⚠️ Database query failed in getConsultations, fallback mode:', (error as Error).message);
     sendSuccess(res, 200, 'Berhasil memuat daftar perikatan konsultasi (mode siaga)', [
       {
         id: 1,
-        project_code: 'PRJ-TAX-2026-001',
-        title: 'SPT Tahunan Badan PT Maju Sukses Berdikari',
+        project_code: 'ZHOU-TAX-2026-088',
+        title: 'Konsultasi Kepatuhan Perpajakan & Kesiapan Coretax',
         status: 'IN_PROGRESS',
         progress_percent: 60,
+        client: {
+          id: req.user?.id || 1,
+          name: 'Klien Zhou Consulting',
+          email: req.user?.email || 'klien@zhouconsulting.com',
+          company_name: 'PT Sinergi Mandiri',
+          phone: '+6281234567890',
+        },
         service: {
           service_code: 'TAX_CORE',
           service_name: 'Tax Service Core & Kesiapan Coretax',
@@ -320,35 +346,228 @@ export const getChatbotTree = async (_req: Request, res: Response): Promise<void
 export const escalateChatbot = async (req: Request, res: Response): Promise<void> => {
   try {
     const clientId = req.user?.id;
-    const { category, answered_node, last_message, service_id, title } = req.body || {};
+    const body = req.body || {};
+    const { category, answered_node, last_message, message, service_id } = body;
+    let { title } = body;
 
     if (!clientId) {
       sendError(res, 401, 'Otorisasi gagal');
       return;
     }
 
-    const code = `TCK-${Date.now().toString().slice(-6)}`;
-    const defaultService = service_id || (await prisma.service.findFirst())?.id || 1;
+    // Dukung fleksibel body message dari FE: `[Kategori] [Urgensi: X] Judul: Deskripsi`
+    let rawMessage = (message || last_message || '').trim();
+    let extractedCategory = category || 'Tax Service Core';
+    let extractedUrgency = 'Normal';
+    let extractedDesc = rawMessage;
 
-    const description = `Eskalasi Otomatis dari Chatbot Bantuan:
-Kategori: ${category || '-'}
-Node Terakhir: ${answered_node || '-'}
-Pesan Klien: ${last_message || '-'}`;
+    if (rawMessage.startsWith('[')) {
+      const match = rawMessage.match(/^\[(.*?)\]\s*\[Urgensi:\s*(.*?)\]\s*(.*?):\s*([\s\S]*)$/i);
+      if (match) {
+        extractedCategory = match[1]?.trim() || extractedCategory;
+        extractedUrgency = match[2]?.trim() || extractedUrgency;
+        if (!title) {
+          title = match[3]?.trim();
+        }
+        extractedDesc = match[4]?.trim() || rawMessage;
+      }
+    }
+
+    if (!title) {
+      title = `Konsultasi Baru (${extractedCategory})`;
+    }
+
+    // Resolve service
+    let defaultService = service_id ? Number(service_id) : undefined;
+    if (!defaultService && extractedCategory) {
+      const matched = await prisma.service.findFirst({
+        where: {
+          OR: [
+            { category: { contains: extractedCategory, mode: 'insensitive' } },
+            { service_name: { contains: extractedCategory, mode: 'insensitive' } },
+          ],
+        },
+      });
+      if (matched) defaultService = matched.id;
+    }
+    if (!defaultService) {
+      const firstSvc = await prisma.service.findFirst();
+      defaultService = firstSvc ? firstSvc.id : 1;
+    }
+
+    const randNum = Math.floor(1000 + Math.random() * 9000);
+    const code = `ZHOU-TK-${Date.now().toString().slice(-4)}-${randNum}`;
+
+    const description = `Eskalasi Tiket Konsultasi Klien:
+Kategori: ${extractedCategory}
+Urgensi: ${extractedUrgency}
+${answered_node ? `Node Terakhir: ${answered_node}\n` : ''}Detail Kebutuhan: ${extractedDesc || '-'}`;
 
     const newProject = await prisma.consultationProject.create({
       data: {
         project_code: code,
         client_id: clientId,
         service_id: defaultService,
-        title: title || `Konsultasi Baru (${category || 'Umum'})`,
+        title,
         description,
         status: 'IN_PROGRESS',
+        progress_percent: 15,
+        tasks: {
+          create: [
+            { task_name: 'Intake & Verifikasi Berkas Awal', is_completed: true },
+            { task_name: 'Penetapan Konsultan PIC & Divisi Terkait', is_completed: false },
+            { task_name: 'Analisis & Pengerjaan Lembar Kerja Fiskal', is_completed: false },
+            { task_name: 'Finalisasi & Penyampaian Hasil Konsultasi', is_completed: false },
+          ],
+        },
+      },
+      include: {
+        client: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            company_name: true,
+            phone: true,
+          },
+        },
+        service: true,
+        tasks: true,
+        documents: true,
       },
     });
+
+    if (newProject.client && !newProject.client.company_name) {
+      newProject.client.company_name = newProject.client.name || 'Perusahaan Klien';
+    }
 
     sendSuccess(res, 201, 'Eskalasi chatbot berhasil dibuat menjadi perikatan konsultasi baru', newProject);
   } catch (error) {
     sendError(res, 500, 'Gagal melakukan eskalasi tiket chatbot', (error as Error).message);
+  }
+};
+
+export const createClientConsultation = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const clientId = req.user?.id;
+    if (!clientId) {
+      sendError(res, 401, 'Tidak terotentikasi');
+      return;
+    }
+
+    const {
+      title,
+      description,
+      category,
+      service_id,
+      priority,
+      urgency,
+    } = req.body || {};
+
+    if (!title || !title.trim()) {
+      sendError(res, 400, 'Judul permohonan konsultasi wajib diisi');
+      return;
+    }
+
+    // 1. Resolve Service ID
+    let resolvedServiceId = service_id ? Number(service_id) : undefined;
+    if (!resolvedServiceId && category) {
+      const catLower = category.toLowerCase();
+      const matched = await prisma.service.findFirst({
+        where: {
+          OR: [
+            { category: { contains: catLower, mode: 'insensitive' } },
+            { service_name: { contains: catLower, mode: 'insensitive' } },
+            { service_code: { contains: catLower, mode: 'insensitive' } },
+          ],
+        },
+      });
+      if (matched) {
+        resolvedServiceId = matched.id;
+      }
+    }
+    if (!resolvedServiceId) {
+      const fallbackService = await prisma.service.findFirst();
+      resolvedServiceId = fallbackService ? fallbackService.id : 1;
+    }
+
+    // 2. Generate unique code
+    const randNum = Math.floor(1000 + Math.random() * 9000);
+    const code = `ZHOU-CS-${Date.now().toString().slice(-4)}-${randNum}`;
+
+    // 3. Format description with metadata
+    const selectedPriority = urgency || priority || 'Normal';
+    const cleanDesc = description ? description.trim() : 'Permohonan konsultasi baru dari klien.';
+    const formattedDesc = `Kategori: ${category || 'Tax Service Core'}
+Urgensi: ${selectedPriority}
+${cleanDesc}`;
+
+    // 4. Create Project
+    const newProject = await prisma.consultationProject.create({
+      data: {
+        project_code: code,
+        client_id: clientId,
+        service_id: resolvedServiceId,
+        title: title.trim(),
+        description: formattedDesc,
+        status: 'IN_PROGRESS',
+        progress_percent: 15,
+        tasks: {
+          create: [
+            { task_name: 'Intake & Verifikasi Berkas Awal', is_completed: true },
+            { task_name: 'Penetapan Konsultan PIC & Divisi Terkait', is_completed: false },
+            { task_name: 'Analisis & Pengerjaan Lembar Kerja Fiskal', is_completed: false },
+            { task_name: 'Finalisasi & Penyampaian Hasil Konsultasi', is_completed: false },
+          ],
+        },
+      },
+      include: {
+        client: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            company_name: true,
+            phone: true,
+          },
+        },
+        service: true,
+        tasks: true,
+        documents: true,
+      },
+    });
+
+    // 5. Handle optional file upload if uploaded together with creation
+    const file = getUploadedFile(req);
+    if (file) {
+      try {
+        const uploadResult = await uploadFileToStorage(file.originalname, file.buffer, file.mimetype, 'documents');
+        const ext = path.extname(file.originalname).toLowerCase();
+        const detected = ext.includes('xls') ? 'XLSX' : ext.includes('doc') ? 'DOCX' : 'PDF';
+
+        const doc = await prisma.projectDocument.create({
+          data: {
+            project_id: newProject.id,
+            file_name: file.originalname,
+            file_path: uploadResult.filePath,
+            file_size: `${(file.size / 1024).toFixed(1)} KB`,
+            file_type: detected,
+            uploaded_by: clientId,
+          },
+        });
+        (newProject.documents as any[]).push(doc);
+      } catch (uploadErr) {
+        console.warn('⚠️ Gagal mengunggah berkas lampiran awal:', (uploadErr as Error).message);
+      }
+    }
+
+    if (newProject.client && !newProject.client.company_name) {
+      newProject.client.company_name = newProject.client.name || 'Perusahaan Klien';
+    }
+
+    sendSuccess(res, 201, 'Permohonan konsultasi baru berhasil dibuat dan diteruskan ke sistem operasional', newProject);
+  } catch (error) {
+    sendError(res, 500, 'Gagal membuat permohonan konsultasi baru', (error as Error).message);
   }
 };
 

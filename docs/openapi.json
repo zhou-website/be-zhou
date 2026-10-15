@@ -1492,6 +1492,109 @@
             }
           }
         }
+      },
+      "post": {
+        "tags": [
+          "Client"
+        ],
+        "summary": "Permohonan Konsultasi Baru (Klien)",
+        "description": "Klien mengirimkan formulir permohonan konsultasi baru beserta opsi unggah dokumen pendukung awal. Data otomatis tercatat di sistem konsultasi operasional.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "title"
+                ],
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "example": "Penyusunan SPT Tahunan Badan & Ekualisasi PPh/PPN"
+                  },
+                  "description": {
+                    "type": "string",
+                    "example": "Mohon pendampingan telaah rekonsiliasi fiskal dan pelaporan SPT Tahunan Badan."
+                  },
+                  "category": {
+                    "type": "string",
+                    "example": "Tax Service Core"
+                  },
+                  "service_id": {
+                    "type": "integer",
+                    "example": 1
+                  },
+                  "urgency": {
+                    "type": "string",
+                    "enum": [
+                      "Normal",
+                      "Tinggi",
+                      "Mendesak"
+                    ],
+                    "example": "Normal"
+                  },
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Berkas pendukung awal (PDF, XLSX, DOCX)"
+                  }
+                }
+              }
+            },
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "title"
+                ],
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "example": "Penyusunan SPT Tahunan Badan & Ekualisasi PPh/PPN"
+                  },
+                  "description": {
+                    "type": "string",
+                    "example": "Mohon pendampingan telaah rekonsiliasi fiskal dan pelaporan SPT Tahunan Badan."
+                  },
+                  "category": {
+                    "type": "string",
+                    "example": "Tax Service Core"
+                  },
+                  "service_id": {
+                    "type": "integer",
+                    "example": 1
+                  },
+                  "urgency": {
+                    "type": "string",
+                    "enum": [
+                      "Normal",
+                      "Tinggi",
+                      "Mendesak"
+                    ],
+                    "example": "Normal"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Permohonan konsultasi baru berhasil dibuat dan diteruskan ke antrean penugasan"
+          },
+          "400": {
+            "description": "Data masukan tidak lengkap atau tidak valid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
       }
     },
     "/api/v1/client/consultations/{id}": {
@@ -3152,10 +3255,10 @@
     "/api/v1/public/careers/{id}/apply": {
       "post": {
         "tags": [
-          "Public CMS"
+          "Public"
         ],
-        "summary": "Kirim Lamaran Karir & Unggah CV (Publik / Tanpa Login)",
-        "description": "Pengunjung dapat melamar lowongan kerja aktif tanpa autentikasi (Item #6). Dalam lowongan yang sama, satu alamat email hanya dapat mengirimkan satu lamaran (Item #7). Berkas CV disimpan ke folder cvs Supabase Storage.",
+        "summary": "Kirim Lamaran Kerja & Unggah CV Pelamar",
+        "description": "Pelamar memasukkan biodata diri dan memilih berkas CV (PDF, DOCX, DOC). Berkas otomatis diunggah ke Supabase Storage, tersimpan ke PostgreSQL, dan dikonfirmasi via email Resend.",
         "parameters": [
           {
             "name": "id",
@@ -3164,7 +3267,7 @@
             "schema": {
               "type": "integer"
             },
-            "description": "ID Lowongan Pekerjaan Aktif"
+            "description": "ID Lowongan Karir yang dilamar"
           }
         ],
         "requestBody": {
@@ -3173,96 +3276,60 @@
             "multipart/form-data": {
               "schema": {
                 "type": "object",
+                "required": [
+                  "applicant_name",
+                  "applicant_email"
+                ],
                 "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Pilih Berkas CV/Resume (Select File: PDF, DOCX, DOC - Maksimal 5MB)"
+                  },
+                  "file_type": {
+                    "type": "string",
+                    "enum": [
+                      "PDF",
+                      "DOCX",
+                      "DOC"
+                    ],
+                    "example": "PDF",
+                    "description": "Pilihan jenis berkas CV yang diunggah (select file type)"
+                  },
                   "applicant_name": {
                     "type": "string",
-                    "example": "Budi Santoso",
+                    "example": "Ahmad Fauzi",
                     "description": "Nama lengkap pelamar"
                   },
                   "applicant_email": {
                     "type": "string",
-                    "format": "email",
-                    "example": "budi.santoso@example.com",
-                    "description": "Alamat email aktif (dibatasi 1 lamaran per lowongan)"
+                    "example": "ahmad.fauzi@gmail.com",
+                    "description": "Alamat email pelamar"
                   },
                   "applicant_phone": {
                     "type": "string",
                     "example": "+6281234567890",
-                    "description": "Nomor WhatsApp / telepon"
-                  },
-                  "file": {
-                    "type": "string",
-                    "format": "binary",
-                    "description": "Unggah berkas CV pelamar (Format PDF, Maksimal 10MB)",
-                    "contentMediaType": "application/pdf"
-                  },
-                  "file_type": {
-                    "type": "string",
-                    "enum": [
-                      "PDF"
-                    ],
-                    "default": "PDF",
-                    "description": "Pilihan jenis format file input: PDF"
+                    "description": "Nomor telepon/WhatsApp pelamar"
                   },
                   "cv_file_path": {
                     "type": "string",
-                    "example": "cvs/cv-budi.pdf",
-                    "description": "Path Supabase Storage (opsional jika upload file fisik)"
+                    "example": "cvs/1791361961730_CV_Ahmad.pdf",
+                    "description": "Path berkas jika CV sudah diunggah sebelumnya (opsional jika memilih file)"
                   }
-                },
-                "required": [
-                  "applicant_name",
-                  "applicant_email",
-                  "file"
-                ]
-              }
-            },
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "applicant_name": {
-                    "type": "string",
-                    "example": "Budi Santoso"
-                  },
-                  "applicant_email": {
-                    "type": "string",
-                    "example": "budi.santoso@example.com"
-                  },
-                  "applicant_phone": {
-                    "type": "string",
-                    "example": "+6281234567890"
-                  },
-                  "cv_file_path": {
-                    "type": "string",
-                    "example": "cvs/cv-budi.pdf"
-                  },
-                  "file_type": {
-                    "type": "string",
-                    "enum": [
-                      "PDF"
-                    ],
-                    "default": "PDF"
-                  }
-                },
-                "required": [
-                  "applicant_name",
-                  "applicant_email",
-                  "cv_file_path"
-                ]
+                }
               }
             }
           }
         },
         "responses": {
           "201": {
-            "description": "Lamaran kerja berhasil dikirimkan"
+            "description": "Lamaran kerja berhasil dikirimkan dan berkas CV tersimpan di Supabase Storage"
           },
           "400": {
-            "description": "Validasi gagal (email sudah pernah melamar atau berkas CV tidak ada)"
+            "description": "Biodata tidak lengkap atau berkas CV belum dipilih"
           },
           "404": {
-            "description": "Lowongan pekerjaan tidak ditemukan"
+            "description": "Lowongan kerja tidak ditemukan"
           }
         }
       }
@@ -3992,46 +4059,11 @@
                   "file": {
                     "type": "string",
                     "format": "binary",
-                    "description": "Unggah berkas fisik dokumen (Format PDF, Maksimal 10MB)",
-                    "contentMediaType": "application/pdf"
+                    "description": "Berkas dokumen (Maks 5MB)"
                   },
-                  "file_type": {
-                    "type": "string",
-                    "enum": [
-                      "PDF"
-                    ],
-                    "default": "PDF",
-                    "description": "Pilihan format jenis berkas input: PDF"
-                  },
-                  "file_name": {
-                    "type": "string",
-                    "example": "Laporan_Keuangan_Klien.pdf",
-                    "description": "Nama berkas dokumen"
-                  }
-                },
-                "required": [
-                  "file"
-                ]
-              }
-            },
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
                   "file_name": {
                     "type": "string",
                     "example": "Laporan_Keuangan_Klien.pdf"
-                  },
-                  "file_path": {
-                    "type": "string",
-                    "example": "documents/klien/Laporan_Keuangan.pdf"
-                  },
-                  "file_type": {
-                    "type": "string",
-                    "enum": [
-                      "PDF"
-                    ],
-                    "default": "PDF"
                   }
                 }
               }
@@ -4249,35 +4281,6 @@
         "requestBody": {
           "required": true,
           "content": {
-            "multipart/form-data": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "title": {
-                    "type": "string",
-                    "example": "PMK No. 48/PMK.03/2026 (Revisi)"
-                  },
-                  "regulation_type": {
-                    "type": "string",
-                    "example": "Peraturan Menteri Keuangan"
-                  },
-                  "file": {
-                    "type": "string",
-                    "format": "binary",
-                    "description": "Unggah salinan dokumen revisi regulasi (Format PDF)",
-                    "contentMediaType": "application/pdf"
-                  },
-                  "file_type": {
-                    "type": "string",
-                    "enum": [
-                      "PDF"
-                    ],
-                    "default": "PDF",
-                    "description": "Pilihan format jenis berkas input: PDF"
-                  }
-                }
-              }
-            },
             "application/json": {
               "schema": {
                 "type": "object",
@@ -4292,14 +4295,11 @@
                   },
                   "file_path": {
                     "type": "string",
-                    "example": "regulations/pmk48.pdf"
+                    "example": "documents/regulasi_pmk48.pdf"
                   },
-                  "file_type": {
+                  "file_size": {
                     "type": "string",
-                    "enum": [
-                      "PDF"
-                    ],
-                    "default": "PDF"
+                    "example": "1.2 MB"
                   }
                 }
               }
@@ -4363,93 +4363,29 @@
         "requestBody": {
           "required": true,
           "content": {
-            "multipart/form-data": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "title": {
-                    "type": "string",
-                    "example": "Panduan Lengkap Kesiapan Transisi Coretax DJP (Update)"
-                  },
-                  "category": {
-                    "type": "string",
-                    "example": "Kesiapan Coretax"
-                  },
-                  "content_type": {
-                    "type": "string",
-                    "enum": [
-                      "ARTICLE",
-                      "GUIDE"
-                    ],
-                    "default": "GUIDE"
-                  },
-                  "body": {
-                    "type": "string",
-                    "example": "Pembaruan materi edukasi..."
-                  },
-                  "file": {
-                    "type": "string",
-                    "format": "binary",
-                    "description": "Unggah berkas revisi panduan (Format PDF)",
-                    "contentMediaType": "application/pdf"
-                  },
-                  "file_type": {
-                    "type": "string",
-                    "enum": [
-                      "PDF"
-                    ],
-                    "default": "PDF",
-                    "description": "Pilihan format jenis berkas input: PDF"
-                  },
-                  "image": {
-                    "type": "string",
-                    "format": "binary",
-                    "description": "Unggah foto cover materi baru"
-                  },
-                  "image_url": {
-                    "type": "string",
-                    "example": "https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=800&q=80"
-                  }
-                }
-              }
-            },
             "application/json": {
               "schema": {
                 "type": "object",
                 "properties": {
                   "title": {
                     "type": "string",
-                    "example": "Panduan Coretax (Update)"
+                    "example": "Panduan Praktis SPT Badan 2026"
                   },
                   "category": {
                     "type": "string",
-                    "example": "Kesiapan Coretax"
+                    "example": "PPh Badan"
                   },
                   "content_type": {
                     "type": "string",
-                    "enum": [
-                      "ARTICLE",
-                      "GUIDE"
-                    ]
+                    "example": "ARTICLE"
                   },
                   "body": {
                     "type": "string",
-                    "example": "Pembaruan isi..."
+                    "example": "Isi artikel edukasi..."
                   },
                   "file_path": {
                     "type": "string",
-                    "example": "education/panduan.pdf"
-                  },
-                  "image_url": {
-                    "type": "string",
-                    "example": "https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=800&q=80"
-                  },
-                  "file_type": {
-                    "type": "string",
-                    "enum": [
-                      "PDF"
-                    ],
-                    "default": "PDF"
+                    "example": "documents/guide_spt.pdf"
                   }
                 }
               }
@@ -4886,10 +4822,10 @@
     "/api/v1/careers/{id}/apply": {
       "post": {
         "tags": [
-          "Public CMS"
+          "Public"
         ],
-        "summary": "Kirim Lamaran Karir & Unggah CV (Publik / Tanpa Login)",
-        "description": "Pengunjung dapat melamar lowongan kerja aktif tanpa autentikasi (Item #6). Dalam lowongan yang sama, satu alamat email hanya dapat mengirimkan satu lamaran (Item #7). Berkas CV disimpan ke folder cvs Supabase Storage.",
+        "summary": "Kirim Lamaran Kerja & Unggah CV Pelamar",
+        "description": "Pelamar memasukkan biodata diri dan memilih berkas CV (PDF, DOCX, DOC). Berkas otomatis diunggah ke Supabase Storage, tersimpan ke PostgreSQL, dan dikonfirmasi via email Resend.",
         "parameters": [
           {
             "name": "id",
@@ -4898,7 +4834,7 @@
             "schema": {
               "type": "integer"
             },
-            "description": "ID Lowongan Pekerjaan Aktif"
+            "description": "ID Lowongan Karir yang dilamar"
           }
         ],
         "requestBody": {
@@ -4907,96 +4843,60 @@
             "multipart/form-data": {
               "schema": {
                 "type": "object",
+                "required": [
+                  "applicant_name",
+                  "applicant_email"
+                ],
                 "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Pilih Berkas CV/Resume (Select File: PDF, DOCX, DOC - Maksimal 5MB)"
+                  },
+                  "file_type": {
+                    "type": "string",
+                    "enum": [
+                      "PDF",
+                      "DOCX",
+                      "DOC"
+                    ],
+                    "example": "PDF",
+                    "description": "Pilihan jenis berkas CV yang diunggah (select file type)"
+                  },
                   "applicant_name": {
                     "type": "string",
-                    "example": "Budi Santoso",
+                    "example": "Ahmad Fauzi",
                     "description": "Nama lengkap pelamar"
                   },
                   "applicant_email": {
                     "type": "string",
-                    "format": "email",
-                    "example": "budi.santoso@example.com",
-                    "description": "Alamat email aktif (dibatasi 1 lamaran per lowongan)"
+                    "example": "ahmad.fauzi@gmail.com",
+                    "description": "Alamat email pelamar"
                   },
                   "applicant_phone": {
                     "type": "string",
                     "example": "+6281234567890",
-                    "description": "Nomor WhatsApp / telepon"
-                  },
-                  "file": {
-                    "type": "string",
-                    "format": "binary",
-                    "description": "Unggah berkas CV pelamar (Format PDF, Maksimal 10MB)",
-                    "contentMediaType": "application/pdf"
-                  },
-                  "file_type": {
-                    "type": "string",
-                    "enum": [
-                      "PDF"
-                    ],
-                    "default": "PDF",
-                    "description": "Pilihan jenis format file input: PDF"
+                    "description": "Nomor telepon/WhatsApp pelamar"
                   },
                   "cv_file_path": {
                     "type": "string",
-                    "example": "cvs/cv-budi.pdf",
-                    "description": "Path Supabase Storage (opsional jika upload file fisik)"
+                    "example": "cvs/1791361961730_CV_Ahmad.pdf",
+                    "description": "Path berkas jika CV sudah diunggah sebelumnya (opsional jika memilih file)"
                   }
-                },
-                "required": [
-                  "applicant_name",
-                  "applicant_email",
-                  "file"
-                ]
-              }
-            },
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "applicant_name": {
-                    "type": "string",
-                    "example": "Budi Santoso"
-                  },
-                  "applicant_email": {
-                    "type": "string",
-                    "example": "budi.santoso@example.com"
-                  },
-                  "applicant_phone": {
-                    "type": "string",
-                    "example": "+6281234567890"
-                  },
-                  "cv_file_path": {
-                    "type": "string",
-                    "example": "cvs/cv-budi.pdf"
-                  },
-                  "file_type": {
-                    "type": "string",
-                    "enum": [
-                      "PDF"
-                    ],
-                    "default": "PDF"
-                  }
-                },
-                "required": [
-                  "applicant_name",
-                  "applicant_email",
-                  "cv_file_path"
-                ]
+                }
               }
             }
           }
         },
         "responses": {
           "201": {
-            "description": "Lamaran kerja berhasil dikirimkan"
+            "description": "Lamaran kerja berhasil dikirimkan dan berkas CV tersimpan di Supabase Storage"
           },
           "400": {
-            "description": "Validasi gagal (email sudah pernah melamar atau berkas CV tidak ada)"
+            "description": "Biodata tidak lengkap atau berkas CV belum dipilih"
           },
           "404": {
-            "description": "Lowongan pekerjaan tidak ditemukan"
+            "description": "Lowongan kerja tidak ditemukan"
           }
         }
       }
@@ -5004,47 +4904,41 @@
     "/api/v1/public/upload": {
       "post": {
         "tags": [
-          "Public CMS"
+          "Public"
         ],
-        "summary": "Unggah Berkas ke Supabase Storage (Mendukung PDF)",
-        "description": "Endpoint universal untuk mengunggah berkas fisik (PDF, dokumen kerja, CV, gambar) langsung ke Supabase Storage.",
+        "summary": "Unggah Berkas Publik ke Supabase Storage",
+        "description": "Helper endpoint untuk mengunggah berkas mandiri ke Supabase Storage dan memperoleh signed URL serta file_path.",
         "requestBody": {
           "required": true,
           "content": {
             "multipart/form-data": {
               "schema": {
                 "type": "object",
+                "required": [
+                  "file"
+                ],
                 "properties": {
                   "file": {
                     "type": "string",
                     "format": "binary",
-                    "description": "Unggah berkas fisik dokumen (Format PDF, Maksimal 10MB)",
-                    "contentMediaType": "application/pdf"
-                  },
-                  "file_type": {
-                    "type": "string",
-                    "enum": [
-                      "PDF"
-                    ],
-                    "default": "PDF",
-                    "description": "Pilihan format jenis berkas input: PDF"
+                    "description": "Pilih Berkas yang diunggah (PDF, DOCX, XLS, PNG, JPEG, maks 5MB)"
                   },
                   "folder": {
                     "type": "string",
-                    "example": "documents",
-                    "description": "Folder target di Supabase: documents, cvs, education, regulations"
+                    "example": "cvs",
+                    "description": "Folder tujuan penyimpanan (cvs, documents, avatars, dll)"
                   }
-                },
-                "required": [
-                  "file"
-                ]
+                }
               }
             }
           }
         },
         "responses": {
           "201": {
-            "description": "Berkas berhasil diunggah"
+            "description": "Berkas berhasil diunggah ke storage"
+          },
+          "400": {
+            "description": "Berkas belum dipilih atau ukuran melebihi batas"
           }
         }
       }
@@ -5052,47 +4946,41 @@
     "/api/v1/upload": {
       "post": {
         "tags": [
-          "Public CMS"
+          "Public"
         ],
-        "summary": "Unggah Berkas ke Supabase Storage (Mendukung PDF)",
-        "description": "Endpoint universal untuk mengunggah berkas fisik (PDF, dokumen kerja, CV, gambar) langsung ke Supabase Storage.",
+        "summary": "Unggah Berkas Publik ke Supabase Storage",
+        "description": "Helper endpoint untuk mengunggah berkas mandiri ke Supabase Storage dan memperoleh signed URL serta file_path.",
         "requestBody": {
           "required": true,
           "content": {
             "multipart/form-data": {
               "schema": {
                 "type": "object",
+                "required": [
+                  "file"
+                ],
                 "properties": {
                   "file": {
                     "type": "string",
                     "format": "binary",
-                    "description": "Unggah berkas fisik dokumen (Format PDF, Maksimal 10MB)",
-                    "contentMediaType": "application/pdf"
-                  },
-                  "file_type": {
-                    "type": "string",
-                    "enum": [
-                      "PDF"
-                    ],
-                    "default": "PDF",
-                    "description": "Pilihan format jenis berkas input: PDF"
+                    "description": "Pilih Berkas yang diunggah (PDF, DOCX, XLS, PNG, JPEG, maks 5MB)"
                   },
                   "folder": {
                     "type": "string",
-                    "example": "documents",
-                    "description": "Folder target di Supabase: documents, cvs, education, regulations"
+                    "example": "cvs",
+                    "description": "Folder tujuan penyimpanan (cvs, documents, avatars, dll)"
                   }
-                },
-                "required": [
-                  "file"
-                ]
+                }
               }
             }
           }
         },
         "responses": {
           "201": {
-            "description": "Berkas berhasil diunggah"
+            "description": "Berkas berhasil diunggah ke storage"
+          },
+          "400": {
+            "description": "Berkas belum dipilih atau ukuran melebihi batas"
           }
         }
       }
@@ -5591,6 +5479,131 @@
           },
           "404": {
             "description": "Admin tidak ditemukan"
+          }
+        }
+      }
+    },
+    "/api/v1/public/consultations": {
+      "post": {
+        "tags": [
+          "Public CMS"
+        ],
+        "summary": "Permohonan Konsultasi Publik / Guest",
+        "description": "Pengunjung publik mengajukan permohonan konsultasi dari halaman kontak/layanan tanpa perlu login terlebih dahulu.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "email",
+                  "title"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "example": "Budi Santoso"
+                  },
+                  "email": {
+                    "type": "string",
+                    "example": "budi@ptmaju.co.id"
+                  },
+                  "phone": {
+                    "type": "string",
+                    "example": "+6281234567890"
+                  },
+                  "company_name": {
+                    "type": "string",
+                    "example": "PT Maju Terus"
+                  },
+                  "title": {
+                    "type": "string",
+                    "example": "Konsultasi Perencanaan Pajak Korporasi"
+                  },
+                  "description": {
+                    "type": "string",
+                    "example": "Ingin berdiskusi terkait kepatuhan integrasi Coretax dan ekualisasi PPh."
+                  },
+                  "category": {
+                    "type": "string",
+                    "example": "Tax Service Core"
+                  },
+                  "urgency": {
+                    "type": "string",
+                    "enum": [
+                      "Normal",
+                      "Tinggi",
+                      "Mendesak"
+                    ],
+                    "example": "Normal"
+                  },
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Berkas pendukung permohonan"
+                  }
+                }
+              }
+            },
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "email",
+                  "title"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "example": "Budi Santoso"
+                  },
+                  "email": {
+                    "type": "string",
+                    "example": "budi@ptmaju.co.id"
+                  },
+                  "phone": {
+                    "type": "string",
+                    "example": "+6281234567890"
+                  },
+                  "company_name": {
+                    "type": "string",
+                    "example": "PT Maju Terus"
+                  },
+                  "title": {
+                    "type": "string",
+                    "example": "Konsultasi Perencanaan Pajak Korporasi"
+                  },
+                  "description": {
+                    "type": "string",
+                    "example": "Ingin berdiskusi terkait kepatuhan integrasi Coretax dan ekualisasi PPh."
+                  },
+                  "category": {
+                    "type": "string",
+                    "example": "Tax Service Core"
+                  },
+                  "urgency": {
+                    "type": "string",
+                    "enum": [
+                      "Normal",
+                      "Tinggi",
+                      "Mendesak"
+                    ],
+                    "example": "Normal"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Permohonan konsultasi berhasil dikirim dan terdaftar di Zhou Consulting"
+          },
+          "400": {
+            "description": "Nama, email, dan kebutuhan permohonan konsultasi wajib diisi"
           }
         }
       }

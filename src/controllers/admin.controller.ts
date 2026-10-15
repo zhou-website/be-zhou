@@ -41,26 +41,35 @@ export const getConsultations = async (req: Request, res: Response): Promise<voi
     const userId = req.user?.id;
     const { category, status, search, assigned_admin_id } = req.query;
 
-    const where: Record<string, unknown> = {};
-    if (status) where.status = status as string;
+    const andConditions: Record<string, unknown>[] = [];
+    if (status) andConditions.push({ status: status as string });
     if (category) {
-      where.service = { category: category as string };
+      andConditions.push({ service: { category: category as string } });
     }
     if (search) {
-      where.OR = [
-        { title: { contains: search as string, mode: 'insensitive' } },
-        { project_code: { contains: search as string, mode: 'insensitive' } },
-      ];
+      andConditions.push({
+        OR: [
+          { title: { contains: search as string, mode: 'insensitive' } },
+          { project_code: { contains: search as string, mode: 'insensitive' } },
+        ],
+      });
     }
 
-    // Penugasan & Hak Akses PIC (Item #14 Revisi FE):
-    // Admin selain PIC yang ditugaskan TIDAK DAPAT melihat atau memantau tiket tersebut.
+    // Penugasan & Hak Akses PIC:
+    // Admin dapat melihat tiket yang ditugaskan kepada dirinya ATAU tiket baru yang belum dialokasikan PIC (unassigned).
     // Superadmin memiliki akses penuh ke seluruh tiket dan dapat memfilter berdasarkan PIC.
     if (userRole === 'ADMIN') {
-      where.assigned_admin_id = userId;
+      andConditions.push({
+        OR: [
+          { assigned_admin_id: userId },
+          { assigned_admin_id: null },
+        ],
+      });
     } else if (assigned_admin_id) {
-      where.assigned_admin_id = Number(assigned_admin_id);
+      andConditions.push({ assigned_admin_id: Number(assigned_admin_id) });
     }
+
+    const where = andConditions.length > 0 ? { AND: andConditions } : {};
 
     const projects = await prisma.consultationProject.findMany({
       where,
@@ -71,6 +80,7 @@ export const getConsultations = async (req: Request, res: Response): Promise<voi
             name: true,
             email: true,
             company_name: true,
+            phone: true,
           },
         },
         service: true,
@@ -89,7 +99,17 @@ export const getConsultations = async (req: Request, res: Response): Promise<voi
       orderBy: { created_at: 'desc' },
     });
 
-    sendSuccess(res, 200, 'Berhasil mengambil daftar konsultasi', projects);
+    const safeProjects = projects.map((p) => ({
+      ...p,
+      client: p.client
+        ? {
+            ...p.client,
+            company_name: p.client.company_name || p.client.name || 'Perusahaan Klien',
+          }
+        : undefined,
+    }));
+
+    sendSuccess(res, 200, 'Berhasil mengambil daftar konsultasi', safeProjects);
   } catch (error) {
     console.warn('⚠️ Database query failed in admin getConsultations, fallback mode:', (error as Error).message);
     sendSuccess(res, 200, 'Berhasil mengambil daftar konsultasi (mode siaga)', []);

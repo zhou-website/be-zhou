@@ -648,6 +648,113 @@ const regDownloadSpec = {
 spec.paths['/api/v1/public/regulations/{id}/download'] = regDownloadSpec;
 spec.paths['/api/v1/regulations/{id}/download'] = regDownloadSpec;
 
+// 18. POST /api/v1/client/consultations
+spec.paths['/api/v1/client/consultations'] = {
+  get: spec.paths['/api/v1/client/consultations']?.get || {
+    tags: ['Client'],
+    summary: 'Daftar Perikatan Konsultasi Klien',
+    description: 'Mengambil riwayat seluruh perikatan konsultasi milik klien yang sedang login.',
+    security: [{ BearerAuth: [] }],
+    responses: {
+      '200': { description: 'Daftar perikatan konsultasi berhasil dimuat' },
+    },
+  },
+  post: {
+    tags: ['Client'],
+    summary: 'Permohonan Konsultasi Baru (Klien)',
+    description: 'Klien mengirimkan formulir permohonan konsultasi baru beserta opsi unggah dokumen pendukung awal. Data otomatis tercatat di sistem konsultasi operasional.',
+    security: [{ BearerAuth: [] }],
+    requestBody: {
+      required: true,
+      content: {
+        'multipart/form-data': {
+          schema: {
+            type: 'object',
+            required: ['title'],
+            properties: {
+              title: { type: 'string', example: 'Penyusunan SPT Tahunan Badan & Ekualisasi PPh/PPN' },
+              description: { type: 'string', example: 'Mohon pendampingan telaah rekonsiliasi fiskal dan pelaporan SPT Tahunan Badan.' },
+              category: { type: 'string', example: 'Tax Service Core' },
+              service_id: { type: 'integer', example: 1 },
+              urgency: { type: 'string', enum: ['Normal', 'Tinggi', 'Mendesak'], example: 'Normal' },
+              file: { type: 'string', format: 'binary', description: 'Berkas pendukung awal (PDF, XLSX, DOCX)' },
+            },
+          },
+        },
+        'application/json': {
+          schema: {
+            type: 'object',
+            required: ['title'],
+            properties: {
+              title: { type: 'string', example: 'Penyusunan SPT Tahunan Badan & Ekualisasi PPh/PPN' },
+              description: { type: 'string', example: 'Mohon pendampingan telaah rekonsiliasi fiskal dan pelaporan SPT Tahunan Badan.' },
+              category: { type: 'string', example: 'Tax Service Core' },
+              service_id: { type: 'integer', example: 1 },
+              urgency: { type: 'string', enum: ['Normal', 'Tinggi', 'Mendesak'], example: 'Normal' },
+            },
+          },
+        },
+      },
+    },
+    responses: {
+      '201': { description: 'Permohonan konsultasi baru berhasil dibuat dan diteruskan ke antrean penugasan' },
+      '400': { description: 'Data masukan tidak lengkap atau tidak valid' },
+      '401': { $ref: '#/components/responses/Unauthorized' },
+    },
+  },
+};
+
+// 19. POST /api/v1/public/consultations
+spec.paths['/api/v1/public/consultations'] = {
+  post: {
+    tags: ['Public CMS'],
+    summary: 'Permohonan Konsultasi Publik / Guest',
+    description: 'Pengunjung publik mengajukan permohonan konsultasi dari halaman kontak/layanan tanpa perlu login terlebih dahulu.',
+    requestBody: {
+      required: true,
+      content: {
+        'multipart/form-data': {
+          schema: {
+            type: 'object',
+            required: ['name', 'email', 'title'],
+            properties: {
+              name: { type: 'string', example: 'Budi Santoso' },
+              email: { type: 'string', example: 'budi@ptmaju.co.id' },
+              phone: { type: 'string', example: '+6281234567890' },
+              company_name: { type: 'string', example: 'PT Maju Terus' },
+              title: { type: 'string', example: 'Konsultasi Perencanaan Pajak Korporasi' },
+              description: { type: 'string', example: 'Ingin berdiskusi terkait kepatuhan integrasi Coretax dan ekualisasi PPh.' },
+              category: { type: 'string', example: 'Tax Service Core' },
+              urgency: { type: 'string', enum: ['Normal', 'Tinggi', 'Mendesak'], example: 'Normal' },
+              file: { type: 'string', format: 'binary', description: 'Berkas pendukung permohonan' },
+            },
+          },
+        },
+        'application/json': {
+          schema: {
+            type: 'object',
+            required: ['name', 'email', 'title'],
+            properties: {
+              name: { type: 'string', example: 'Budi Santoso' },
+              email: { type: 'string', example: 'budi@ptmaju.co.id' },
+              phone: { type: 'string', example: '+6281234567890' },
+              company_name: { type: 'string', example: 'PT Maju Terus' },
+              title: { type: 'string', example: 'Konsultasi Perencanaan Pajak Korporasi' },
+              description: { type: 'string', example: 'Ingin berdiskusi terkait kepatuhan integrasi Coretax dan ekualisasi PPh.' },
+              category: { type: 'string', example: 'Tax Service Core' },
+              urgency: { type: 'string', enum: ['Normal', 'Tinggi', 'Mendesak'], example: 'Normal' },
+            },
+          },
+        },
+      },
+    },
+    responses: {
+      '201': { description: 'Permohonan konsultasi berhasil dikirim dan terdaftar di Zhou Consulting' },
+      '400': { description: 'Nama, email, dan kebutuhan permohonan konsultasi wajib diisi' },
+    },
+  },
+};
+
 fs.writeFileSync(openApiPath, JSON.stringify(spec, null, 2), 'utf8');
 console.log('✅ Successfully updated docs/openapi.json with all new endpoints! Total paths:', Object.keys(spec.paths).length);
 
