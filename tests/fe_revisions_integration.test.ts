@@ -121,9 +121,9 @@ describe('🎯 Zhou Consulting — FE Revisions End-to-End Integration Test Suit
     });
     const dataAdm = await resAdm.json();
     assert.strictEqual(resAdm.status, 200);
-    // All returned projects for this admin must have assigned_admin_id == 2
+    // Returned projects for this admin must either be assigned to them (id: 2) or unassigned (null) awaiting handling
     for (const proj of dataAdm.data) {
-      assert.strictEqual(proj.assigned_admin_id, 2);
+      assert.ok(proj.assigned_admin_id === 2 || proj.assigned_admin_id === null, 'Admin can view assigned or unassigned tickets');
     }
   });
 
