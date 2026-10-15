@@ -93,9 +93,9 @@ export const FALLBACK_ACCOUNTS = [
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body || {};
-
-    if (!email || !password) {
-      sendError(res, 400, 'Email dan kata sandi wajib diisi');
+    const cleanInput = String(email || '').trim();
+    if (!cleanInput || !password) {
+      sendError(res, 400, 'Email/ID Pengguna dan kata sandi wajib diisi');
       return;
     }
 
@@ -103,7 +103,22 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     let isDbAvailable = true;
 
     try {
-      user = await prisma.user.findUnique({ where: { email } });
+      const isEmailLike = cleanInput.includes('@');
+      const alternateEmail = isEmailLike
+        ? cleanInput.endsWith('.com')
+          ? cleanInput.replace(/\.com$/, '')
+          : `${cleanInput}.com`
+        : `${cleanInput}@zhouconsulting.com`;
+
+      user = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { email: { equals: cleanInput, mode: 'insensitive' } },
+            { email: { equals: alternateEmail, mode: 'insensitive' } },
+            { name: { equals: cleanInput, mode: 'insensitive' } },
+          ],
+        },
+      });
     } catch (dbErr) {
       console.warn('⚠️ Database query failed in login, activating resilient fallback mode:', (dbErr as Error).message);
       isDbAvailable = false;

@@ -441,6 +441,23 @@ ${answered_node ? `Node Terakhir: ${answered_node}\n` : ''}Detail Kebutuhan: ${e
       newProject.client.company_name = newProject.client.name || 'Perusahaan Klien';
     }
 
+    // Catat ke append-only audit log
+    try {
+      await prisma.auditLog.create({
+        data: {
+          admin_id: 1, // Super Administrator Zhou / Sistem Operasional
+          client_id: clientId,
+          project_id: newProject.id,
+          action: 'CLIENT_CHATBOT_ESCALATION',
+          status_before: 'DRAFT',
+          status_after: 'IN_PROGRESS',
+          description: `Eskalasi tiket konsultasi otomatis via Chatbot: [${newProject.project_code}] ${newProject.title}`,
+        },
+      });
+    } catch (auditErr) {
+      console.warn('⚠️ Gagal mencatat audit log chatbot escalation:', (auditErr as Error).message);
+    }
+
     sendSuccess(res, 201, 'Eskalasi chatbot berhasil dibuat menjadi perikatan konsultasi baru', newProject);
   } catch (error) {
     sendError(res, 500, 'Gagal melakukan eskalasi tiket chatbot', (error as Error).message);
@@ -563,6 +580,23 @@ ${cleanDesc}`;
 
     if (newProject.client && !newProject.client.company_name) {
       newProject.client.company_name = newProject.client.name || 'Perusahaan Klien';
+    }
+
+    // Catat ke append-only audit log
+    try {
+      await prisma.auditLog.create({
+        data: {
+          admin_id: 1, // Super Administrator Zhou / Sistem Operasional
+          client_id: clientId,
+          project_id: newProject.id,
+          action: 'CLIENT_CONSULTATION_REQUEST',
+          status_before: 'DRAFT',
+          status_after: 'IN_PROGRESS',
+          description: `Permohonan konsultasi baru diajukan oleh klien: [${newProject.project_code}] ${newProject.title}`,
+        },
+      });
+    } catch (auditErr) {
+      console.warn('⚠️ Gagal mencatat audit log permohonan konsultasi:', (auditErr as Error).message);
     }
 
     sendSuccess(res, 201, 'Permohonan konsultasi baru berhasil dibuat dan diteruskan ke sistem operasional', newProject);

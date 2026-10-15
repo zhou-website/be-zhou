@@ -9,7 +9,7 @@ export const registerSchema = z.object({
 });
 
 export const loginSchema = z.object({
-  email: z.string().email('Format email tidak valid'),
+  email: z.string().min(1, 'Email atau ID Pengguna wajib diisi'),
   password: z.string().min(1, 'Kata sandi wajib diisi'),
 });
 
