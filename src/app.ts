@@ -61,14 +61,19 @@ const frontendUrls = (process.env.FRONTEND_URL || '')
 // Comprehensive CORS configuration with origin whitelist (Server IP, Vercel frontend, localhost, domain)
 const allowedOrigins = [
   ...frontendUrls,
+  'http://139.190.103.80',
+  'https://139.190.103.80',
+  'http://139.190.103.80:5000',
   'http://43.173.2.162',
   'https://43.173.2.162',
   'http://43.173.2.162:5000',
   'http://43.173.2.162.sslip.io',
   'https://43.173.2.162.sslip.io',
   'https://zhouconsulting.com',
+  'https://dev.zhouconsulting.com',
   'https://api.zhouconsulting.com',
   'https://zhouconsulting.id',
+  'https://dev.zhouconsulting.id',
   'https://api.zhouconsulting.id',
   'http://localhost:3000',
   'http://localhost:3001',
@@ -88,10 +93,10 @@ app.use(
 
       // Cek apakah origin ada di daftar allowedOrigins atau pattern regex
       const isExplicitlyAllowed = allowedOrigins.includes(origin);
-      const isServerIp = /^https?:\/\/43\.173\.2\.162(:[0-9]+)?$/.test(origin);
+      const isServerIp = /^https?:\/\/(139\.190\.103\.80|43\.173\.2\.162)(:[0-9]+)?$/.test(origin);
       const isSslip = /^https?:\/\/[a-zA-Z0-9_.-]*sslip\.io(:[0-9]+)?$/.test(origin);
       const isFrontendDeploy = /^https:\/\/[a-zA-Z0-9_.-]+\.(vercel\.app|netlify\.app|pages\.dev|railway\.app)$/.test(origin);
-      const isZhouDomain = /^https:\/\/[a-zA-Z0-9_.-]+\.zhouconsulting\.(com|id)$/.test(origin);
+      const isZhouDomain = /^https?:\/\/([a-zA-Z0-9_.-]+\.)?zhouconsulting\.(com|id)(:[0-9]+)?$/.test(origin);
       const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:[0-9]+)?$/.test(origin);
       const isApiTester = /^https?:\/\/([a-zA-Z0-9_.-]+\.)?(scalar\.(com|dev)|postman\.com|hoppscotch\.io|swagger\.io)(:[0-9]+)?$/.test(origin);
 

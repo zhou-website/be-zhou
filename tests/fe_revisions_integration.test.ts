@@ -98,6 +98,68 @@ describe('🎯 Zhou Consulting — FE Revisions End-to-End Integration Test Suit
     assert.strictEqual(reactivateRes.status, 200);
   });
 
+  test('2.3 Superadmin can update admin password and delete audit logs from database server', async () => {
+    // 1. Update admin password
+    const updateRes = await fetch(`${baseUrl}/api/v1/superadmin/admins/2`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${superadminToken}`,
+      },
+      body: JSON.stringify({
+        password: 'AdminPasswordBaru123!',
+        is_active: true,
+      }),
+    });
+    const updateData = await updateRes.json();
+    assert.strictEqual(updateRes.status, 200);
+
+    // Verify login with new password works
+    const loginRes = await fetch(`${baseUrl}/api/v1/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'admin@zhouconsulting.com',
+        password: 'AdminPasswordBaru123!',
+      }),
+    });
+    assert.strictEqual(loginRes.status, 200);
+
+    // Reset password back to Admin123!
+    await fetch(`${baseUrl}/api/v1/superadmin/admins/2`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${superadminToken}`,
+      },
+      body: JSON.stringify({
+        password: 'Admin123!',
+      }),
+    });
+
+    // 2. Insert dummy audit log and test DELETE /api/v1/superadmin/audit-logs
+    const dummyLog = await prisma.auditLog.create({
+      data: {
+        admin_id: 1,
+        action: 'TEST_DELETE_ME',
+        description: 'Temporary audit log to test DELETE endpoint',
+      },
+    });
+
+    // Delete single audit log
+    const delSingleRes = await fetch(`${baseUrl}/api/v1/superadmin/audit-logs/${dummyLog.id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${superadminToken}` },
+    });
+    const delSingleData = await delSingleRes.json();
+    assert.strictEqual(delSingleRes.status, 200);
+    assert.strictEqual(delSingleData.data.deleted_count, 1);
+
+    // Verify it is gone
+    const checkDeleted = await prisma.auditLog.findUnique({ where: { id: dummyLog.id } });
+    assert.strictEqual(checkDeleted, null);
+  });
+
   test('3. Superadmin assigns and reassigns consultation ticket to PIC Admin', async () => {
     const project = await prisma.consultationProject.findFirst();
     assert.ok(project, 'Project should exist');
@@ -113,6 +175,50 @@ describe('🎯 Zhou Consulting — FE Revisions End-to-End Integration Test Suit
     const assignData = await assignRes.json();
     assert.strictEqual(assignRes.status, 200);
     assert.strictEqual(assignData.data.assigned_admin_id, 2);
+  });
+
+  test('3.1 Admin & Superadmin can update progress, PIC, and notes via PUT /api/v1/admin/consultations/:id', async () => {
+    const project = await prisma.consultationProject.findFirst();
+    assert.ok(project, 'Project should exist');
+
+    // Admin updates progress and notes
+    const updateRes = await fetch(`${baseUrl}/api/v1/admin/consultations/${project.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminToken}`,
+      },
+      body: JSON.stringify({
+        progress_percent: 75,
+        description: 'Pemeriksaan draft lampiran 1771 telah selesai dilakukan oleh staf konsultan.',
+        notes: 'Pemeriksaan draft lampiran 1771 telah selesai dilakukan oleh staf konsultan.',
+      }),
+    });
+    const updateData = await updateRes.json();
+    assert.strictEqual(updateRes.status, 200);
+    assert.strictEqual(updateData.data.progress_percent, 75);
+    assert.strictEqual(
+      updateData.data.description,
+      'Pemeriksaan draft lampiran 1771 telah selesai dilakukan oleh staf konsultan.'
+    );
+
+    // Superadmin updates PIC and progress
+    const saUpdateRes = await fetch(`${baseUrl}/api/v1/admin/consultations/${project.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${superadminToken}`,
+      },
+      body: JSON.stringify({
+        progress_percent: 85,
+        assigned_admin_id: 2,
+        description: 'Review final oleh Senior Tax Consultant sebelum penyerahan laporan ke klien.',
+      }),
+    });
+    const saUpdateData = await saUpdateRes.json();
+    assert.strictEqual(saUpdateRes.status, 200);
+    assert.strictEqual(saUpdateData.data.progress_percent, 85);
+    assert.strictEqual(saUpdateData.data.assigned_admin_id, 2);
   });
 
   test('4. Admin only sees tickets assigned to them, while Superadmin sees all', async () => {

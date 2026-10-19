@@ -126,8 +126,11 @@ export const getServices = async (_req: Request, res: Response): Promise<void> =
       }),
     ]);
 
-    const rawWa = csSetting?.setting_value || '+6281298765432';
-    const cleanWa = rawWa.replace(/[^0-9]/g, '');
+    const rawWa = csSetting?.setting_value || '+6285121286086';
+    let cleanWa = rawWa.replace(/[^0-9]/g, '');
+    if (cleanWa.startsWith('0')) {
+      cleanWa = '62' + cleanWa.slice(1);
+    }
 
     const enriched = services.map((s) => {
       const defaults = getServiceDefaults(s.service_code, s.service_name);
@@ -165,8 +168,8 @@ export const getServices = async (_req: Request, res: Response): Promise<void> =
     sendSuccess(res, 200, 'Berhasil memuat katalog layanan', enriched);
   } catch (error) {
     console.warn('⚠️ Database query failed in getServices, activating fallback:', (error as Error).message);
-    const rawWa = '+6281298765432';
-    const cleanWa = '6281298765432';
+    const rawWa = '+6285121286086';
+    const cleanWa = '6285121286086';
     const fallbackServices = [
       {
         id: 1,

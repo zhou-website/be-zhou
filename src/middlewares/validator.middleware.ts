@@ -17,7 +17,13 @@ export const validate = (schema: ZodSchema) => {
           field: issue.path.join('.'),
           message: issue.message,
         }));
-        sendError(res, 400, 'Validasi data input gagal', formattedErrors);
+        // Mengembalikan pesan spesifik dari field yang bermasalah agar Frontend mendapatkan feedback informatif
+        const specificMessage =
+          formattedErrors.length > 0 && formattedErrors[0].message
+            ? formattedErrors[0].message
+            : 'Validasi data input gagal';
+
+        sendError(res, 400, specificMessage, formattedErrors);
         return;
       }
       sendError(res, 400, 'Format payload request tidak valid');

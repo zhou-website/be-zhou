@@ -216,6 +216,9 @@ export const googleLogin = async (req: Request, res: Response): Promise<void> =>
         sendError(res, 401, 'Token Google OAuth tidak valid atau telah kedaluwarsa');
         return;
       }
+    } else if (process.env.NODE_ENV === 'production' && GOOGLE_CLIENT_ID) {
+      sendError(res, 400, 'ID token Google OAuth wajib disertakan di lingkungan produksi');
+      return;
     }
 
     if (!email) {
@@ -223,12 +226,17 @@ export const googleLogin = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    // Google OAuth hanya untuk role USER/Klien (PRD requirement)
+    // Google OAuth hanya untuk role USER/Klien (PRD requirement: Staf Admin dilarang login via Google)
     let user: any = null;
     let isDbAvailable = true;
 
     try {
       user = await prisma.user.findUnique({ where: { email } });
+
+      if (user && user.role !== 'USER') {
+        sendError(res, 403, 'Akses ditolak: Akun staf admin tidak diperkenankan login melalui Google OAuth. Silakan login via email dan kata sandi.');
+        return;
+      }
 
       if (!user) {
         user = await prisma.user.create({

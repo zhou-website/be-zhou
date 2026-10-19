@@ -35,25 +35,48 @@ export const createAdmin = async (req: Request, res: Response): Promise<void> =>
     const { name, email, password, role, phone } = req.body || {};
 
     if (!name || !email || !password) {
-      sendError(res, 400, 'Nama lengkap, email, dan kata sandi awal wajib diisi');
+      sendError(res, 400, 'Nama lengkap, email, dan kata sandi awal wajib diisi', [
+        ...(!name ? [{ field: 'name', message: 'Nama lengkap wajib diisi' }] : []),
+        ...(!email ? [{ field: 'email', message: 'Email wajib diisi' }] : []),
+        ...(!password ? [{ field: 'password', message: 'Kata sandi awal wajib diisi' }] : []),
+      ]);
       return;
     }
 
-    const existing = await prisma.user.findUnique({ where: { email } });
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const normalizedEmail = String(email).trim().toLowerCase();
+    if (!emailRegex.test(normalizedEmail)) {
+      sendError(res, 400, 'Format email tidak valid (contoh: staf@zhouconsulting.com)', [
+        { field: 'email', message: 'Format email tidak valid (contoh: staf@zhouconsulting.com)' },
+      ]);
+      return;
+    }
+
+    const passStr = String(password).trim();
+    if (passStr.length < 8 || !/[A-Z]/.test(passStr) || !/\d/.test(passStr)) {
+      sendError(res, 400, 'Password minimal 8 karakter dengan 1 huruf besar dan 1 angka', [
+        { field: 'password', message: 'Password minimal 8 karakter dengan 1 huruf besar dan 1 angka' },
+      ]);
+      return;
+    }
+
+    const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (existing) {
-      sendError(res, 409, 'Email staf telah terdaftar');
+      sendError(res, 409, `Email ${email} sudah terdaftar`, [
+        { field: 'email', message: `Email ${email} sudah terdaftar` },
+      ]);
       return;
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(passStr, 10);
 
     const newAdmin = await prisma.user.create({
       data: {
-        name,
-        email,
+        name: String(name).trim(),
+        email: normalizedEmail,
         password: hashedPassword,
         role: role === 'SUPERADMIN' ? 'SUPERADMIN' : 'ADMIN',
-        phone,
+        phone: phone ? String(phone).trim() : null,
         is_active: true,
       },
       select: {
@@ -74,15 +97,22 @@ export const createAdmin = async (req: Request, res: Response): Promise<void> =>
         data: {
           admin_id: superadminId,
           action: 'ADMIN_CREATE',
-          description: `Superadmin membuat akun admin baru: ${email} (${newAdmin.role})`,
+          description: `Superadmin membuat akun admin baru: ${normalizedEmail} (${newAdmin.role})`,
         },
       });
     }
 
     // Kirim kredensial awal secara otomatis via email Resend
-    await sendAdminCredentialsEmail(email, name, password);
+    const emailResult = await sendAdminCredentialsEmail(normalizedEmail, String(name).trim(), passStr);
 
-    sendSuccess(res, 201, 'Akun staf admin berhasil dibuat dan kredensial dikirimkan via email', newAdmin);
+    sendSuccess(
+      res,
+      201,
+      emailResult.success
+        ? 'Akun staf admin berhasil dibuat dan kredensial dikirimkan via email'
+        : 'Akun staf admin berhasil dibuat (pengiriman email onboarding diproses)',
+      newAdmin
+    );
   } catch (error) {
     sendError(res, 500, 'Gagal membuat akun staf admin', (error as Error).message);
   }
@@ -252,11 +282,50 @@ export const exportAuditLogs = async (_req: Request, res: Response): Promise<voi
   }
 };
 
+export const deleteAuditLogs = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { admin_id, client_id, project_id, before_date } = req.query;
+
+    const where: Record<string, unknown> = {};
+    if (id) {
+      const parsedId = parseInt(String(id), 10);
+      if (isNaN(parsedId)) {
+        sendError(res, 400, 'ID log audit tidak valid');
+        return;
+      }
+      where.id = parsedId;
+    } else {
+      if (admin_id) where.admin_id = Number(admin_id);
+      if (client_id) where.client_id = Number(client_id);
+      if (project_id) where.project_id = Number(project_id);
+      if (before_date) {
+        where.created_at = { lte: new Date(String(before_date)) };
+      }
+    }
+
+    const deleteResult = await prisma.auditLog.deleteMany({
+      where,
+    });
+
+    sendSuccess(res, 200, 'Riwayat log audit berhasil dihapus dari database server', {
+      deleted_count: deleteResult.count,
+    });
+  } catch (error) {
+    sendError(res, 500, 'Gagal menghapus log audit dari database', (error as Error).message);
+  }
+};
+
 export const updateAdmin = async (req: Request, res: Response): Promise<void> => {
   try {
     const adminId = parseInt(String(req.params.id), 10);
     const superadminId = req.user?.id;
-    const { name, email, role, phone, password, is_active } = req.body || {};
+    const { name, email, role, phone, password, new_password, is_active, status } = req.body || {};
+
+    if (isNaN(adminId)) {
+      sendError(res, 400, 'ID staf admin tidak valid');
+      return;
+    }
 
     const existingAdmin = await prisma.user.findUnique({ where: { id: adminId } });
     if (!existingAdmin) {
@@ -264,22 +333,61 @@ export const updateAdmin = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    if (email && email !== existingAdmin.email) {
-      const emailTaken = await prisma.user.findUnique({ where: { email } });
-      if (emailTaken) {
-        sendError(res, 409, 'Alamat email sudah digunakan oleh pengguna lain');
+    const updateData: Record<string, unknown> = {};
+    if (name !== undefined) updateData.name = String(name).trim();
+
+    if (email !== undefined) {
+      const normalizedEmail = String(email).trim().toLowerCase();
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(normalizedEmail)) {
+        sendError(res, 400, 'Format email tidak valid (contoh: staf@zhouconsulting.com)', [
+          { field: 'email', message: 'Format email tidak valid (contoh: staf@zhouconsulting.com)' },
+        ]);
         return;
+      }
+
+      if (normalizedEmail !== existingAdmin.email) {
+        const emailTaken = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+        if (emailTaken) {
+          sendError(res, 409, `Email ${email} sudah terdaftar`, [
+            { field: 'email', message: `Email ${email} sudah terdaftar` },
+          ]);
+          return;
+        }
+        updateData.email = normalizedEmail;
       }
     }
 
-    const updateData: Record<string, unknown> = {};
-    if (name !== undefined) updateData.name = name;
-    if (email !== undefined) updateData.email = email;
-    if (phone !== undefined) updateData.phone = phone;
+    if (phone !== undefined) updateData.phone = String(phone).trim();
     if (role !== undefined) updateData.role = role === 'SUPERADMIN' ? 'SUPERADMIN' : 'ADMIN';
-    if (is_active !== undefined) updateData.is_active = Boolean(is_active);
-    if (password) {
-      updateData.password = await bcrypt.hash(password, 10);
+
+    // Mendukung is_active (boolean) maupun status ('ACTIVE' | 'INACTIVE') dari Frontend
+    let targetActive: boolean | undefined;
+    if (is_active !== undefined) {
+      targetActive = Boolean(is_active);
+    } else if (status !== undefined) {
+      const s = String(status).toUpperCase();
+      targetActive = s === 'ACTIVE' || s === 'AKTIF' || s === 'TRUE';
+    }
+    if (targetActive !== undefined) {
+      updateData.is_active = targetActive;
+    }
+
+    // Pembaruan Password staf di database server jika disertakan (tanpa memerlukan password lama)
+    let passwordWasUpdated = false;
+    const rawPassword = password !== undefined ? password : new_password;
+    if (rawPassword !== undefined && rawPassword !== null) {
+      const passStr = String(rawPassword).trim();
+      if (passStr.length > 0) {
+        if (passStr.length < 8 || !/[A-Z]/.test(passStr) || !/\d/.test(passStr)) {
+          sendError(res, 400, 'Password minimal 8 karakter dengan 1 huruf besar dan 1 angka', [
+            { field: 'password', message: 'Password minimal 8 karakter dengan 1 huruf besar dan 1 angka' },
+          ]);
+          return;
+        }
+        updateData.password = await bcrypt.hash(passStr, 10);
+        passwordWasUpdated = true;
+      }
     }
 
     const updated = await prisma.user.update({
@@ -297,19 +405,103 @@ export const updateAdmin = async (req: Request, res: Response): Promise<void> =>
       },
     });
 
+    // Jika akun dinonaktifkan, batalkan sesi aktif di Redis seketika
+    if (targetActive === false) {
+      try {
+        await redis.set(`user_revoked:${adminId}`, 'true', 'EX', 86400);
+      } catch (redisErr) {
+        console.warn('⚠️ Redis set user_revoked skipped:', (redisErr as Error).message);
+      }
+    } else if (targetActive === true) {
+      try {
+        await redis.del(`user_revoked:${adminId}`);
+      } catch (redisErr) {
+        console.warn('⚠️ Redis del user_revoked skipped:', (redisErr as Error).message);
+      }
+    }
+
     if (superadminId) {
+      const passNote = passwordWasUpdated ? ' (termasuk pembaruan kata sandi staf)' : '';
       await prisma.auditLog.create({
         data: {
           admin_id: superadminId,
           action: 'ADMIN_UPDATE',
-          description: `Superadmin memperbarui profil staf: ${updated.email} (${updated.name})`,
+          description: `Superadmin memperbarui akun staf: ${updated.email} (${updated.name})${passNote}`,
         },
       });
     }
 
-    sendSuccess(res, 200, 'Data staf admin berhasil diperbarui', updated);
+    sendSuccess(res, 200, 'Data staf admin & kredensial berhasil diperbarui di database server', updated);
   } catch (error) {
     sendError(res, 500, 'Gagal memperbarui data admin', (error as Error).message);
+  }
+};
+
+/**
+ * Endpoint khusus reset / ganti kata sandi staf admin oleh Superadmin
+ * Tidak memerlukan password lama
+ */
+export const resetAdminPassword = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const adminId = parseInt(String(req.params.id), 10);
+    const superadminId = req.user?.id;
+    const { password, new_password } = req.body || {};
+
+    if (isNaN(adminId)) {
+      sendError(res, 400, 'ID staf admin tidak valid');
+      return;
+    }
+
+    const targetPassword = password !== undefined ? password : new_password;
+    if (!targetPassword) {
+      sendError(res, 400, 'Kata sandi baru wajib disertakan', [
+        { field: 'password', message: 'Kata sandi baru wajib disertakan' },
+      ]);
+      return;
+    }
+
+    const passStr = String(targetPassword).trim();
+    if (passStr.length < 8 || !/[A-Z]/.test(passStr) || !/\d/.test(passStr)) {
+      sendError(res, 400, 'Password minimal 8 karakter dengan 1 huruf besar dan 1 angka', [
+        { field: 'password', message: 'Password minimal 8 karakter dengan 1 huruf besar dan 1 angka' },
+      ]);
+      return;
+    }
+
+    const existingAdmin = await prisma.user.findUnique({
+      where: { id: adminId },
+      select: { id: true, name: true, email: true, role: true, is_active: true },
+    });
+
+    if (!existingAdmin) {
+      sendError(res, 404, 'Akun staf admin tidak ditemukan');
+      return;
+    }
+
+    const hashedPassword = await bcrypt.hash(passStr, 10);
+    await prisma.user.update({
+      where: { id: adminId },
+      data: { password: hashedPassword },
+    });
+
+    // Catat ke audit log
+    if (superadminId) {
+      await prisma.auditLog.create({
+        data: {
+          admin_id: superadminId,
+          action: 'ADMIN_PASSWORD_RESET',
+          description: `Superadmin mereset kata sandi staf: ${existingAdmin.email} (${existingAdmin.name})`,
+        },
+      });
+    }
+
+    sendSuccess(res, 200, 'Kata sandi staf admin berhasil diperbarui', {
+      id: existingAdmin.id,
+      name: existingAdmin.name,
+      email: existingAdmin.email,
+    });
+  } catch (error) {
+    sendError(res, 500, 'Gagal memperbarui kata sandi staf admin', (error as Error).message);
   }
 };
 

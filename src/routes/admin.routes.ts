@@ -4,6 +4,7 @@ import {
   getConsultations,
   getConsultationById,
   createConsultation,
+  updateConsultation,
   updateConsultationStatus,
   assignConsultationPic,
   addProjectTask,
@@ -31,6 +32,7 @@ router.get('/clients', getClients);
 router.get('/consultations', getConsultations);
 router.get('/consultations/:id', getConsultationById);
 router.post('/consultations', validate(createConsultationSchema), createConsultation);
+router.put('/consultations/:id', updateConsultation);
 router.patch('/consultations/:id/status', validate(updateStatusSchema), updateConsultationStatus);
 router.patch('/consultations/:id/assign', assignConsultationPic);
 router.post('/consultations/:id/tasks', validate(addTaskSchema), addProjectTask);

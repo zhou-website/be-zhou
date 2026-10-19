@@ -498,12 +498,48 @@ spec.paths['/api/v1/admin/consultations/{id}/assign'] = {
   },
 };
 
+// 10.5 Superadmin Create Admin (POST /api/v1/superadmin/admins)
+spec.paths['/api/v1/superadmin/admins'] = {
+  ...(spec.paths['/api/v1/superadmin/admins'] || {}),
+  post: {
+    tags: ['Superadmin'],
+    summary: 'Tambah Akun Staf Admin Baru',
+    description: 'Superadmin mendaftarkan akun staf admin baru. Backend secara otomatis mengirimkan email kredensial (berisi tautan login onboarding dan kata sandi sementara) via Resend transaksional email. Mengembalikan pesan validasi spesifik dan informatif jika email telah terdaftar atau format kata sandi belum memenuhi kriteria.',
+    security: [{ BearerAuth: [] }],
+    requestBody: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            required: ['name', 'email', 'password'],
+            properties: {
+              name: { type: 'string', example: 'Selvianna, S.E', description: 'Nama lengkap staf' },
+              email: { type: 'string', format: 'email', example: 'ana@zhouconsulting.com', description: 'Format email lengkap staf' },
+              password: { type: 'string', example: 'AnaStaff123!', description: 'Kata sandi awal (minimal 8 karakter dengan 1 huruf besar dan 1 angka)' },
+              role: { type: 'string', enum: ['ADMIN', 'SUPERADMIN'], default: 'ADMIN', example: 'ADMIN' },
+              phone: { type: 'string', example: '+6281298761201' },
+            },
+          },
+        },
+      },
+    },
+    responses: {
+      '201': { description: 'Akun staf admin berhasil dibuat dan kredensial dikirimkan via email' },
+      '400': { description: 'Validasi gagal (contoh: format email tidak valid atau password minimal 8 karakter dengan 1 huruf besar dan 1 angka)' },
+      '409': { description: 'Email sudah terdaftar' },
+      '403': { description: 'Khusus Superadmin' },
+    },
+  },
+};
+
 // 11. Superadmin Update Admin (PUT /api/v1/superadmin/admins/{id})
 spec.paths['/api/v1/superadmin/admins/{id}'] = {
+  ...(spec.paths['/api/v1/superadmin/admins/{id}'] || {}),
   put: {
     tags: ['Superadmin'],
     summary: 'Superadmin Memperbarui Akun Staf Admin (Kelola Admin)',
-    description: 'Superadmin dapat mengelola admin-admin dengan mengubah nama lengkap, email, nomor telepon, peran (ADMIN/SUPERADMIN), kata sandi, dan status aktif.',
+    description: 'Superadmin dapat mengelola admin-admin dengan mengubah nama lengkap, email, nomor telepon, peran (ADMIN/SUPERADMIN), status aktif, atau memperbarui kata sandi (tanpa memerlukan password lama).',
     security: [{ BearerAuth: [] }],
     parameters: [
       {
@@ -526,7 +562,8 @@ spec.paths['/api/v1/superadmin/admins/{id}'] = {
               phone: { type: 'string', example: '+6281298887766' },
               role: { type: 'string', enum: ['ADMIN', 'SUPERADMIN'], example: 'ADMIN' },
               is_active: { type: 'boolean', example: true },
-              password: { type: 'string', example: 'PasswordBaru123!' },
+              password: { type: 'string', example: 'PasswordBaru123!', description: 'Kata sandi baru staf (tanpa perlu password lama)' },
+              new_password: { type: 'string', example: 'PasswordBaru123!', description: 'Alias kata sandi baru staf' },
             },
           },
         },
@@ -534,6 +571,48 @@ spec.paths['/api/v1/superadmin/admins/{id}'] = {
     },
     responses: {
       '200': { description: 'Data staf admin berhasil diperbarui' },
+      '400': { description: 'Validasi input tidak sesuai' },
+      '403': { description: 'Khusus Superadmin' },
+      '404': { description: 'Admin tidak ditemukan' },
+      '409': { description: 'Alamat email sudah digunakan oleh pengguna lain' },
+    },
+  },
+};
+
+// 11.5 Superadmin Reset / Ganti Kata Sandi Staf Admin (PATCH /api/v1/superadmin/admins/{id}/password)
+spec.paths['/api/v1/superadmin/admins/{id}/password'] = {
+  patch: {
+    tags: ['Superadmin'],
+    summary: 'Reset / Ganti Kata Sandi Staf Admin',
+    description: 'Endpoint khusus Superadmin untuk mereset atau mengganti kata sandi staf admin secara andal tanpa memerlukan kata sandi lama. Memeriksa kriteria keamanan (minimal 8 karakter dengan 1 huruf besar dan 1 angka) serta mencatat tindakan ke audit log.',
+    security: [{ BearerAuth: [] }],
+    parameters: [
+      {
+        name: 'id',
+        in: 'path',
+        required: true,
+        schema: { type: 'integer' },
+        description: 'ID Akun Admin yang kata sandinya direset',
+      },
+    ],
+    requestBody: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            required: ['password'],
+            properties: {
+              password: { type: 'string', example: 'StaffBaruSecure123!', description: 'Kata sandi baru staf' },
+              new_password: { type: 'string', example: 'StaffBaruSecure123!', description: 'Alias opsional untuk kata sandi baru' },
+            },
+          },
+        },
+      },
+    },
+    responses: {
+      '200': { description: 'Kata sandi staf admin berhasil diperbarui' },
+      '400': { description: 'Kata sandi tidak memenuhi kriteria minimal 8 karakter dengan 1 huruf besar dan 1 angka' },
       '403': { description: 'Khusus Superadmin' },
       '404': { description: 'Admin tidak ditemukan' },
     },
@@ -570,5 +649,71 @@ if (spec.paths['/api/v1/public/services']) {
     'Memuat seluruh katalog layanan aktif lengkap dengan card penjelasan yang dikelola dari BE, daftar fitur/cakupan, dan tombol konsultasi yang mengarah langsung ke WhatsApp resmi Zhou Consulting (Item #17 & #18 Revisi FE).';
 }
 
+// 14. Admin & Superadmin Update Consultation (PUT /api/v1/admin/consultations/{id})
+spec.paths['/api/v1/admin/consultations/{id}'] = {
+  ...(spec.paths['/api/v1/admin/consultations/{id}'] || {}),
+  put: {
+    tags: ['Admin'],
+    summary: 'Update Progres, PIC, dan Catatan Konsultasi',
+    description: 'Admin PIC dan Superadmin dapat memperbarui persentase progres (0-100), PIC yang ditugaskan, dan catatan deskripsi lembar kerja konsultasi. Tindakan dicatat otomatis ke database append-only audit log.',
+    security: [{ BearerAuth: [] }],
+    parameters: [
+      {
+        name: 'id',
+        in: 'path',
+        required: true,
+        schema: { type: 'integer' },
+        description: 'ID Lembar Kerja Konsultasi',
+      },
+    ],
+    requestBody: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            properties: {
+              progress_percent: { type: 'integer', minimum: 0, maximum: 100, example: 75, description: 'Persentase progres pengerjaan (0-100)' },
+              assigned_admin_id: { type: 'integer', example: 2, description: 'ID staf admin yang ditugaskan sebagai PIC' },
+              description: { type: 'string', example: 'Pemeriksaan draft lampiran 1771 telah selesai dilakukan.', description: 'Catatan konsultasi / deskripsi kerja' },
+              status: { type: 'string', enum: ['IN_PROGRESS', 'COMPLETED'], example: 'IN_PROGRESS', description: 'Status perikatan (opsional)' },
+              title: { type: 'string', example: 'Konsultasi Kepatuhan Pajak Badan 2026', description: 'Judul perikatan (opsional)' },
+            },
+          },
+        },
+      },
+    },
+    responses: {
+      '200': { description: 'Data konsultasi berhasil diperbarui' },
+      '400': { description: 'Input tidak valid' },
+      '403': { description: 'Akses ditolak: Bukan PIC atau wewenang tidak mencukupi' },
+      '404': { description: 'Perikatan konsultasi tidak ditemukan' },
+    },
+  },
+};
+
+// 15. Superadmin Delete Audit Logs (DELETE /api/v1/superadmin/audit-logs)
+spec.paths['/api/v1/superadmin/audit-logs'] = {
+  ...(spec.paths['/api/v1/superadmin/audit-logs'] || {}),
+  delete: {
+    tags: ['Superadmin'],
+    summary: 'Hapus Riwayat Log Audit dari Database Server',
+    description: 'Superadmin dapat membersihkan riwayat log audit dari database server tanpa bergantung pada cache lokal browser. Mendukung filter opsional query parameters seperti admin_id, client_id, project_id, atau before_date.',
+    security: [{ BearerAuth: [] }],
+    parameters: [
+      { name: 'admin_id', in: 'query', schema: { type: 'integer' }, description: 'Filter ID admin tertentu' },
+      { name: 'client_id', in: 'query', schema: { type: 'integer' }, description: 'Filter ID klien tertentu' },
+      { name: 'project_id', in: 'query', schema: { type: 'integer' }, description: 'Filter ID perikatan tertentu' },
+      { name: 'before_date', in: 'query', schema: { type: 'string', format: 'date-time' }, description: 'Hapus log sebelum tanggal tertentu' },
+    ],
+    responses: {
+      '200': { description: 'Riwayat log audit berhasil dihapus dari database server' },
+      '401': { description: 'Tidak terotentikasi' },
+      '403': { description: 'Khusus Superadmin' },
+    },
+  },
+};
+
 fs.writeFileSync(openApiPath, JSON.stringify(spec, null, 2), 'utf8');
 console.log('🎉 Successfully applied FE Revisions to docs/openapi.json! Total Paths:', Object.keys(spec.paths).length);
+

@@ -229,6 +229,199 @@ export const updateConsultationStatus = async (req: Request, res: Response): Pro
   }
 };
 
+export const updateConsultation = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userRole = (req.user?.role || '').toUpperCase();
+    const userId = req.user?.id;
+    const projectId = parseInt(String(req.params.id), 10);
+
+    if (isNaN(projectId)) {
+      sendError(res, 400, 'ID perikatan konsultasi tidak valid');
+      return;
+    }
+
+    const currentProject = await prisma.consultationProject.findUnique({
+      where: { id: projectId },
+      include: {
+        tasks: true,
+        assigned_admin: true,
+      },
+    });
+
+    if (!currentProject) {
+      sendError(res, 404, 'Perikatan konsultasi tidak ditemukan');
+      return;
+    }
+
+    // Hak akses PIC: Admin biasa hanya boleh memperbarui tiket yang ditugaskan kepadanya atau belum bertuan
+    if (userRole === 'ADMIN' && currentProject.assigned_admin_id !== null && currentProject.assigned_admin_id !== userId) {
+      sendError(res, 403, 'Akses ditolak: Anda bukan PIC Admin yang ditugaskan untuk tiket perikatan ini');
+      return;
+    }
+
+    const {
+      progress_percent,
+      progress,
+      progres,
+      assigned_admin_id,
+      admin_id,
+      pic_id,
+      description,
+      notes,
+      catatan,
+      status,
+      title,
+    } = req.body || {};
+
+    const updateData: Record<string, unknown> = {};
+
+    // 1. Update Progres (progress_percent: 0-100)
+    const rawProgress = progress_percent !== undefined ? progress_percent : (progress !== undefined ? progress : progres);
+    if (rawProgress !== undefined && rawProgress !== null && rawProgress !== '') {
+      const parsedProgress = parseInt(String(rawProgress), 10);
+      if (isNaN(parsedProgress) || parsedProgress < 0 || parsedProgress > 100) {
+        sendError(res, 400, 'Nilai progres harus berupa angka antara 0 hingga 100');
+        return;
+      }
+      updateData.progress_percent = parsedProgress;
+    }
+
+    // 2. Update Catatan Konsultasi (description)
+    const rawNotes = description !== undefined ? description : (notes !== undefined ? notes : catatan);
+    if (rawNotes !== undefined) {
+      updateData.description = typeof rawNotes === 'string' ? rawNotes : String(rawNotes);
+    }
+
+    // 3. Update Title (jika disertakan)
+    if (title !== undefined && String(title).trim().length > 0) {
+      updateData.title = String(title).trim();
+    }
+
+    // 4. Update PIC Admin (assigned_admin_id)
+    const rawPic = assigned_admin_id !== undefined ? assigned_admin_id : (pic_id !== undefined ? pic_id : admin_id);
+    let targetPicAdmin: { id: number; name: string; email: string } | null = null;
+
+    if (rawPic !== undefined && rawPic !== null && rawPic !== '') {
+      const targetAdminId = parseInt(String(rawPic), 10);
+      if (isNaN(targetAdminId)) {
+        sendError(res, 400, 'ID PIC Admin tidak valid');
+        return;
+      }
+
+      // Validasi wewenang: Hanya Superadmin yang berwenang menugaskan / mereassign PIC ke staf lain
+      if (userRole !== 'SUPERADMIN' && targetAdminId !== userId) {
+        sendError(res, 403, 'Hanya Superadmin yang berwenang menugaskan atau mengubah PIC tiket ke staf lain');
+        return;
+      }
+
+      const adminUser = await prisma.user.findFirst({
+        where: { id: targetAdminId, role: { in: ['ADMIN', 'SUPERADMIN'] }, is_active: true },
+        select: { id: true, name: true, email: true },
+      });
+
+      if (!adminUser) {
+        sendError(res, 404, 'PIC Admin staf tidak ditemukan atau akun sedang dinonaktifkan');
+        return;
+      }
+
+      targetPicAdmin = adminUser;
+      updateData.assigned_admin_id = targetAdminId;
+    }
+
+    // 5. Update Status (jika disertakan)
+    if (status !== undefined) {
+      const normalizedStatus = String(status).toUpperCase();
+      if (!['IN_PROGRESS', 'COMPLETED'].includes(normalizedStatus)) {
+        sendError(res, 400, 'Status baru tidak valid (pilih IN_PROGRESS atau COMPLETED)');
+        return;
+      }
+
+      if (normalizedStatus === 'COMPLETED') {
+        const hasUnfinishedTasks = currentProject.tasks.some((t) => !t.is_completed);
+        if (hasUnfinishedTasks) {
+          sendError(
+            res,
+            400,
+            'Semua item checklist penugasan harus dicentang selesai sebelum menandai status perikatan sebagai Completed'
+          );
+          return;
+        }
+      }
+
+      updateData.status = normalizedStatus;
+    }
+
+    // Eksekusi pembaruan ke PostgreSQL
+    const updatedProject = await prisma.consultationProject.update({
+      where: { id: projectId },
+      data: updateData,
+      include: {
+        client: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            company_name: true,
+            phone: true,
+          },
+        },
+        service: true,
+        assigned_admin: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            role: true,
+          },
+        },
+        tasks: { orderBy: { id: 'asc' } },
+        documents: { orderBy: { created_at: 'desc' } },
+      },
+    });
+
+    // Catat ke append-only audit log
+    if (userId) {
+      const auditParts: string[] = [];
+      if (updateData.progress_percent !== undefined) auditParts.push(`progres ${updateData.progress_percent}%`);
+      if (updateData.assigned_admin_id !== undefined && targetPicAdmin) {
+        auditParts.push(`PIC: ${targetPicAdmin.name}`);
+      }
+      if (updateData.description !== undefined) auditParts.push('catatan konsultasi diperbarui');
+      if (updateData.status !== undefined) auditParts.push(`status: ${updateData.status}`);
+
+      const auditSummary = auditParts.length > 0 ? auditParts.join(', ') : 'progres & lembar kerja diperbarui';
+
+      await prisma.auditLog.create({
+        data: {
+          admin_id: userId,
+          client_id: currentProject.client_id,
+          project_id: currentProject.id,
+          action: 'CONSULTATION_UPDATE',
+          status_before: currentProject.status,
+          status_after: (updateData.status as string) || currentProject.status,
+          description: `Admin memperbarui tiket perikatan [${currentProject.project_code}]: ${auditSummary}`,
+        },
+      });
+    }
+
+    // Generate signed download URLs untuk berkas dokumen
+    const docsWithUrls = await Promise.all(
+      updatedProject.documents.map(async (doc) => ({
+        ...doc,
+        download_url: await getSignedDownloadUrl(doc.file_path, 3600),
+      }))
+    );
+
+    sendSuccess(res, 200, 'Data konsultasi (progres, PIC, dan catatan) berhasil diperbarui di server', {
+      ...updatedProject,
+      documents: docsWithUrls,
+    });
+  } catch (error) {
+    sendError(res, 500, 'Gagal memperbarui data konsultasi', (error as Error).message);
+  }
+};
+
 export const addProjectTask = async (req: Request, res: Response): Promise<void> => {
   try {
     const projectId = parseInt(String(req.params.id), 10);

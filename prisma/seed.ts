@@ -153,7 +153,8 @@ async function main() {
     { setting_key: 'company_email', setting_value: 'contact@zhouconsulting.com' },
     { setting_key: 'company_phone', setting_value: '+62 21 555 8899' },
     { setting_key: 'company_address', setting_value: 'Sudirman Central Business District (SCBD) Lot 28, Jakarta Selatan' },
-    { setting_key: 'cs_whatsapp', setting_value: '+6281298765432' },
+    { setting_key: 'cs_whatsapp', setting_value: '+6285121286086' },
+    { setting_key: 'whatsapp_number', setting_value: '+6285121286086' },
   ];
 
   for (const item of settings) {
