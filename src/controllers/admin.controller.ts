@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import path from 'path';
 import { prisma } from '../config/database.js';
 import { sendSuccess, sendError } from '../utils/response.js';
-import { uploadFileToStorage, getSignedDownloadUrl } from '../services/storage.service.js';
+import { uploadFileToStorage, getSignedDownloadUrl, deleteFileFromStorage } from '../services/storage.service.js';
 import { getUploadedFile } from '../middlewares/upload.middleware.js';
 
 
@@ -24,14 +24,7 @@ export const getDashboardOverview = async (_req: Request, res: Response): Promis
       total_documents: totalDocs,
     });
   } catch (error) {
-    console.warn('⚠️ Database query failed in admin getDashboardOverview, fallback mode:', (error as Error).message);
-    sendSuccess(res, 200, 'Berhasil memuat statistik operasional admin (mode siaga)', {
-      total_consultations: 1,
-      active_consultations: 1,
-      completed_consultations: 0,
-      total_clients: 1,
-      total_documents: 0,
-    });
+    sendError(res, 500, 'Gagal memuat statistik operasional admin', (error as Error).message);
   }
 };
 
@@ -111,8 +104,7 @@ export const getConsultations = async (req: Request, res: Response): Promise<voi
 
     sendSuccess(res, 200, 'Berhasil mengambil daftar konsultasi', safeProjects);
   } catch (error) {
-    console.warn('⚠️ Database query failed in admin getConsultations, fallback mode:', (error as Error).message);
-    sendSuccess(res, 200, 'Berhasil mengambil daftar konsultasi (mode siaga)', []);
+    sendError(res, 500, 'Gagal mengambil daftar konsultasi', (error as Error).message);
   }
 };
 
@@ -568,6 +560,51 @@ export const getGlobalDocuments = async (_req: Request, res: Response): Promise<
   }
 };
 
+export const deleteDocument = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    const userId = req.user?.id;
+
+    if (isNaN(id)) {
+      sendError(res, 400, 'ID dokumen tidak valid');
+      return;
+    }
+
+    const doc = await prisma.projectDocument.findUnique({
+      where: { id },
+      include: { project: true },
+    });
+
+    if (!doc) {
+      sendError(res, 404, 'Dokumen tidak ditemukan');
+      return;
+    }
+
+    if (doc.file_path) {
+      await deleteFileFromStorage(doc.file_path);
+    }
+
+    await prisma.projectDocument.delete({ where: { id } });
+
+    if (userId) {
+      await prisma.auditLog.create({
+        data: {
+          admin_id: userId,
+          client_id: doc.project?.client_id || null,
+          project_id: doc.project_id,
+          action: 'DOCUMENT_DELETE',
+          file_name: doc.file_name,
+          description: `Admin menghapus dokumen [${doc.file_name}] dari tiket [${doc.project?.project_code || doc.project_id}]`,
+        },
+      });
+    }
+
+    sendSuccess(res, 200, 'Dokumen berhasil dihapus dari repositori server', { id });
+  } catch (error) {
+    sendError(res, 500, 'Gagal menghapus dokumen', (error as Error).message);
+  }
+};
+
 
 export const getClients = async (_req: Request, res: Response): Promise<void> => {
   try {
@@ -736,6 +773,80 @@ export const assignConsultationPic = async (req: Request, res: Response): Promis
     );
   } catch (error) {
     sendError(res, 500, 'Gagal menugaskan PIC tiket konsultasi', (error as Error).message);
+  }
+};
+
+
+export const deleteConsultation = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const projectId = parseInt(String(req.params.id), 10);
+    if (isNaN(projectId)) {
+      sendError(res, 400, 'ID konsultasi tidak valid');
+      return;
+    }
+
+    const project = await prisma.consultationProject.findUnique({
+      where: { id: projectId },
+      include: { documents: true },
+    });
+
+    if (!project) {
+      sendError(res, 404, 'Perikatan konsultasi tidak ditemukan');
+      return;
+    }
+
+    for (const doc of project.documents) {
+      try {
+        await deleteFileFromStorage(doc.file_path);
+      } catch {}
+    }
+
+    await prisma.auditLog.deleteMany({ where: { project_id: projectId } });
+    await prisma.consultationProject.delete({ where: { id: projectId } });
+
+    sendSuccess(res, 200, 'Konsultasi berhasil dihapus secara permanen dari database');
+  } catch (error) {
+    sendError(res, 500, 'Gagal menghapus konsultasi', (error as Error).message);
+  }
+};
+
+export const archiveConsultation = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const projectId = parseInt(String(req.params.id), 10);
+    const { is_archived } = req.body || {};
+    if (isNaN(projectId)) {
+      sendError(res, 400, 'ID konsultasi tidak valid');
+      return;
+    }
+
+    const updated = await prisma.consultationProject.update({
+      where: { id: projectId },
+      data: { is_archived: is_archived !== undefined ? Boolean(is_archived) : true },
+    });
+
+    sendSuccess(res, 200, `Konsultasi berhasil ${updated.is_archived ? 'diarsipkan' : 'dipulihkan'}`, updated);
+  } catch (error) {
+    sendError(res, 500, 'Gagal mengubah status arsip konsultasi', (error as Error).message);
+  }
+};
+
+export const updateConsultationPriority = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const projectId = parseInt(String(req.params.id), 10);
+    const { priority } = req.body || {};
+    if (isNaN(projectId)) {
+      sendError(res, 400, 'ID konsultasi tidak valid');
+      return;
+    }
+
+    const updated = await prisma.consultationProject.update({
+      where: { id: projectId },
+      data: { priority: priority || 'Normal' },
+    });
+
+    sendSuccess(res, 200, 'Prioritas konsultasi berhasil diperbarui', updated);
+  } catch (error) {
+    sendError(res, 500, 'Gagal mengubah prioritas konsultasi', (error as Error).message);
   }
 };
 

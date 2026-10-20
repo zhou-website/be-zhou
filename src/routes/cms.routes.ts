@@ -16,8 +16,11 @@ import {
   createCareer,
   updateCareer,
   deleteCareer,
+  getCareerSettings,
+  updateCareerSettings,
   getJobApplications,
   downloadJobApplicationCv,
+  deleteJobApplication,
   getFaqs,
   createFaq,
   updateFaq,
@@ -60,8 +63,11 @@ router.delete('/education/:id', deleteEducation);
 router.post('/careers', createCareer);
 router.put('/careers/:id', updateCareer);
 router.delete('/careers/:id', deleteCareer);
+router.get('/career-settings', getCareerSettings);
+router.put('/career-settings', updateCareerSettings);
 router.get('/job-applications', getJobApplications);
 router.get('/job-applications/:id/download', downloadJobApplicationCv);
+router.delete('/job-applications/:id', deleteJobApplication);
 
 // Chatbot FAQs CRUD
 router.get('/faqs', getFaqs);

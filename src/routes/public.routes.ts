@@ -12,6 +12,7 @@ import {
   getCareers,
   getCareerById,
   applyCareer,
+  getCareerSettings,
   getContactSettings,
   submitContactMessage,
   submitPublicConsultation,
@@ -41,6 +42,8 @@ router.get('/education/:id/download', downloadEducationFile);
 
 // Careers & Application
 router.get('/careers', getCareers);
+router.get('/careers/settings', getCareerSettings);
+router.get('/career-settings', getCareerSettings);
 router.get('/careers/:id', getCareerById);
 router.post('/careers/:id/apply', flexibleUploadMiddleware, applyCareer);
 

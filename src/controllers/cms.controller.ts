@@ -4,7 +4,7 @@ import { prisma } from '../config/database.js';
 import { redis } from '../config/redis.js';
 import { sendSuccess, sendError } from '../utils/response.js';
 import { sendApplicationConfirmationEmail } from '../services/email.service.js';
-import { uploadFileToStorage, getSignedDownloadUrl, getPublicStorageUrl } from '../services/storage.service.js';
+import { uploadFileToStorage, getSignedDownloadUrl, getPublicStorageUrl, deleteFileFromStorage } from '../services/storage.service.js';
 import { getUploadedFile } from '../middlewares/upload.middleware.js';
 
 // --- CMS: Company Profiles & Visi Misi ---
@@ -13,21 +13,7 @@ export const getCompanyProfiles = async (_req: Request, res: Response): Promise<
     const profiles = await prisma.companyProfile.findMany();
     sendSuccess(res, 200, 'Berhasil memuat profil perusahaan', profiles);
   } catch (error) {
-    console.warn('⚠️ Database query failed in getCompanyProfiles, activating fallback:', (error as Error).message);
-    sendSuccess(res, 200, 'Berhasil memuat profil perusahaan (mode siaga)', [
-      {
-        id: 1,
-        section_key: 'hero_tentang_kami',
-        title: 'Tentang Zhou Consulting Group',
-        content: 'Firma konsultan terkemuka di bidang perpajakan, akuntansi, dan advisory bisnis terintegrasi.',
-      },
-      {
-        id: 2,
-        section_key: 'visi_misi',
-        title: 'Visi dan Misi Zhou Consulting',
-        content: 'Menjadi mitra strategis terpercaya dalam kepatuhan pajak dan tata kelola keuangan korporasi modern.',
-      },
-    ]);
+    sendError(res, 500, 'Gagal memuat profil perusahaan', (error as Error).message);
   }
 };
 
@@ -167,88 +153,7 @@ export const getServices = async (_req: Request, res: Response): Promise<void> =
 
     sendSuccess(res, 200, 'Berhasil memuat katalog layanan', enriched);
   } catch (error) {
-    console.warn('⚠️ Database query failed in getServices, activating fallback:', (error as Error).message);
-    const rawWa = '+6285121286086';
-    const cleanWa = '6285121286086';
-    const fallbackServices = [
-      {
-        id: 1,
-        service_code: 'TAX_CORE',
-        service_name: 'Tax Service Core & Kesiapan Coretax',
-        category: 'TAX',
-        description: 'Layanan pemenuhan kewajiban perpajakan rutin, SPT Masa, dan SPT Tahunan Badan terstandar.',
-        card_explanation:
-          'Pendampingan komprehensif kepatuhan perpajakan korporasi dan transisi kesiapan sistem Coretax DJP. Meliputi penyusunan & pelaporan SPT Masa PPh & PPN, rekonsiliasi fiskal, ekualisasi omzet, validasi faktur, dan SPT Tahunan Badan 1771.',
-        features: [
-          'Pendampingan Transisi & Kesiapan Coretax DJP',
-          'Pelaporan SPT Masa PPh & PPN Tepat Waktu',
-          'Rekonsiliasi Fiskal & SPT Tahunan Badan 1771',
-          'Mitigasi Risiko Denda & Kepatuhan Regulasi Pajak',
-        ],
-        whatsapp_url: `https://wa.me/${cleanWa}?text=${encodeURIComponent('Halo Zhou Consulting, saya ingin konsultasi Tax Service Core & Kesiapan Coretax')}`,
-        consultation_url: `https://wa.me/${cleanWa}?text=${encodeURIComponent('Halo Zhou Consulting, saya ingin konsultasi Tax Service Core & Kesiapan Coretax')}`,
-        consultation_button_label: 'Konsultasi via WhatsApp',
-        is_active: true,
-      },
-      {
-        id: 2,
-        service_code: 'ACC_SERV',
-        service_name: 'Accounting Service',
-        category: 'ACCOUNTING',
-        description: 'Penyusunan laporan keuangan PSAK komprehensif, neraca, laba rugi, dan rekonsiliasi bank berkala.',
-        card_explanation:
-          'Penyusunan laporan keuangan komprehensif berstandar PSAK/SAK Indonesia, mencakup neraca, laba rugi, buku besar, jurnal penyesuaian, serta rekonsiliasi perbankan multi-rekening secara berkala.',
-        features: [
-          'Laporan Posisi Keuangan (Neraca) & Laba Rugi',
-          'Pencatatan Jurnal & Buku Besar Terstandar PSAK',
-          'Rekonsiliasi Bank & Manajemen Kas Berkala',
-          'Review & Supervisi Akuntansi Korporasi',
-        ],
-        whatsapp_url: `https://wa.me/${cleanWa}?text=${encodeURIComponent('Halo Zhou Consulting, saya ingin konsultasi Accounting Service')}`,
-        consultation_url: `https://wa.me/${cleanWa}?text=${encodeURIComponent('Halo Zhou Consulting, saya ingin konsultasi Accounting Service')}`,
-        consultation_button_label: 'Konsultasi via WhatsApp',
-        is_active: true,
-      },
-      {
-        id: 3,
-        service_code: 'FIN_CONS',
-        service_name: 'Business Financial Advisory',
-        category: 'CONSULTING',
-        description: 'Konsultasi restrukturisasi bisnis, perencanaan pajak strategis, dan manajemen arus kas perusahaan.',
-        card_explanation:
-          'Konsultasi finansial strategis untuk restrukturisasi keuangan korporasi, evaluasi kelayakan investasi modal, optimalisasi manajemen arus kas operasional, dan perencanaan anggaran bisnis tahunan.',
-        features: [
-          'Analisis Kesehatan & Kinerja Finansial Korporasi',
-          'Perencanaan Anggaran & Optimalisasi Arus Kas',
-          'Evaluasi Kelayakan Investasi & Studi Finansial',
-          'Restrukturisasi Finansial & Mitigasi Risiko',
-        ],
-        whatsapp_url: `https://wa.me/${cleanWa}?text=${encodeURIComponent('Halo Zhou Consulting, saya ingin konsultasi Business Financial Consulting')}`,
-        consultation_url: `https://wa.me/${cleanWa}?text=${encodeURIComponent('Halo Zhou Consulting, saya ingin konsultasi Business Financial Consulting')}`,
-        consultation_button_label: 'Konsultasi via WhatsApp',
-        is_active: true,
-      },
-      {
-        id: 4,
-        service_code: 'LEGAL_TAX',
-        service_name: 'Tax Audit & Dispute Assistance',
-        category: 'TAX',
-        description: 'Pendampingan pemeriksaan pajak, keberatan, banding, serta penyelesaian surat klarifikasi SP2DK.',
-        card_explanation:
-          'Pendampingan hukum dan advokasi sengketa perpajakan terpercaya. Meliputi pendampingan pemeriksaan KPP, penyusunan tanggapan resmi surat klarifikasi SP2DK, pengajuan surat keberatan pajak, hingga proses banding di Pengadilan Pajak.',
-        features: [
-          'Pendampingan Pemeriksaan Pajak (Audit Assistance)',
-          'Penyusunan Tanggapan Resmi Surat Klarifikasi SP2DK',
-          'Pengajuan Permohonan Keberatan Pajak',
-          'Advokasi & Banding di Pengadilan Pajak',
-        ],
-        whatsapp_url: `https://wa.me/${cleanWa}?text=${encodeURIComponent('Halo Zhou Consulting, saya ingin konsultasi Legal & Tax Dispute Advisory')}`,
-        consultation_url: `https://wa.me/${cleanWa}?text=${encodeURIComponent('Halo Zhou Consulting, saya ingin konsultasi Legal & Tax Dispute Advisory')}`,
-        consultation_button_label: 'Konsultasi via WhatsApp',
-        is_active: true,
-      },
-    ];
-    sendSuccess(res, 200, 'Berhasil memuat katalog layanan (mode siaga)', fallbackServices);
+    sendError(res, 500, 'Gagal memuat katalog layanan', (error as Error).message);
   }
 };
 
@@ -262,7 +167,7 @@ export const createService = async (req: Request, res: Response): Promise<void> 
         category,
         description,
         card_explanation: card_explanation || null,
-        features: typeof features === 'object' ? JSON.stringify(features) : features || null,
+        features: features ? (typeof features === 'string' ? features : JSON.stringify(features)) : null,
       },
     });
     sendSuccess(res, 201, 'Layanan baru berhasil ditambahkan', newService);
@@ -414,7 +319,7 @@ export const downloadRegulationFile = async (req: Request, res: Response): Promi
 export const createRegulation = async (req: Request, res: Response): Promise<void> => {
   try {
     const body = req.body || {};
-    let { title, regulation_type, file_path, file_size } = body;
+    let { title, regulation_type, file_path, file_size, legal_status, replacement_ref } = body;
     const adminId = req.user?.id;
     const file = getUploadedFile(req);
 
@@ -437,6 +342,8 @@ export const createRegulation = async (req: Request, res: Response): Promise<voi
         regulation_type,
         file_path,
         file_size: file_size || '0 KB',
+        legal_status: legal_status || 'Berlaku',
+        replacement_ref: replacement_ref || null,
         uploaded_by: adminId,
       },
     });
@@ -887,6 +794,32 @@ export const downloadJobApplicationCv = async (req: Request, res: Response): Pro
   }
 };
 
+export const deleteJobApplication = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    if (isNaN(id)) {
+      sendError(res, 400, 'ID lamaran kerja tidak valid');
+      return;
+    }
+
+    const app = await prisma.jobApplication.findUnique({ where: { id } });
+    if (!app) {
+      sendError(res, 404, 'Data lamaran pekerjaan tidak ditemukan');
+      return;
+    }
+
+    if (app.cv_file_path) {
+      await deleteFileFromStorage(app.cv_file_path);
+    }
+
+    await prisma.jobApplication.delete({ where: { id } });
+
+    sendSuccess(res, 200, 'Data lamaran kerja dan berkas CV berhasil dihapus', { id });
+  } catch (error) {
+    sendError(res, 500, 'Gagal menghapus data lamaran kerja', (error as Error).message);
+  }
+};
+
 // Endpoint bantuan publik untuk mengunggah berkas independen (misal CV / formulir publik)
 export const uploadPublicFile = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -1138,7 +1071,7 @@ export const updateService = async (req: Request, res: Response): Promise<void> 
         ...(is_active !== undefined && { is_active }),
         ...(card_explanation !== undefined && { card_explanation }),
         ...(features !== undefined && {
-          features: typeof features === 'object' ? JSON.stringify(features) : features,
+          features: features ? (typeof features === 'string' ? features : JSON.stringify(features)) : null,
         }),
       },
     });
@@ -1198,7 +1131,7 @@ export const updateRegulation = async (req: Request, res: Response): Promise<voi
   try {
     const id = parseInt(String(req.params.id), 10);
     const body = req.body || {};
-    let { title, regulation_type, file_path, file_size } = body;
+    let { title, regulation_type, file_path, file_size, legal_status, replacement_ref } = body;
     const file = getUploadedFile(req);
 
     if (file) {
@@ -1216,6 +1149,8 @@ export const updateRegulation = async (req: Request, res: Response): Promise<voi
         ...(regulation_type !== undefined && { regulation_type }),
         ...(file_path !== undefined && { file_path }),
         ...(file_size !== undefined && { file_size }),
+        ...(legal_status !== undefined && { legal_status }),
+        ...(replacement_ref !== undefined && { replacement_ref }),
       },
     });
 
@@ -1446,6 +1381,64 @@ export const updateContactSettings = async (req: Request, res: Response): Promis
     sendSuccess(res, 200, 'Pengaturan kontak berhasil diperbarui', updatedList);
   } catch (error) {
     sendError(res, 500, 'Gagal memperbarui pengaturan kontak', (error as Error).message);
+  }
+};
+
+export const getCareerSettings = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const setting = await prisma.siteSetting.findUnique({
+      where: { setting_key: 'career_settings' },
+    });
+
+    if (!setting) {
+      sendSuccess(res, 200, 'Pengaturan karir default', {
+        isOpen: true,
+        closedTitle: 'Lowongan Periode Ini Belum Dibuka',
+        closedMessage: 'Saat ini seluruh posisi di Zhou Consulting telah terisi dan belum ada lowongan baru yang dibuka untuk publik.',
+        closedPeriodNote: 'Jadwal penerimaan periode baru akan diumumkan melalui portal resmi dan akun LinkedIn Zhou Consulting.',
+        lastUpdated: new Date().toISOString(),
+      });
+      return;
+    }
+
+    let parsedData: any = {};
+    try {
+      parsedData = JSON.parse(setting.setting_value);
+    } catch {
+      parsedData = {
+        isOpen: setting.setting_value === 'true',
+        closedMessage: setting.closed_message,
+      };
+    }
+
+    sendSuccess(res, 200, 'Berhasil memuat pengaturan karir', parsedData);
+  } catch (error) {
+    sendError(res, 500, 'Gagal memuat pengaturan karir', (error as Error).message);
+  }
+};
+
+export const updateCareerSettings = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const body = req.body || {};
+    const settingValue = JSON.stringify(body);
+    const closedMsg = body.closedMessage || null;
+
+    await prisma.siteSetting.upsert({
+      where: { setting_key: 'career_settings' },
+      update: {
+        setting_value: settingValue,
+        closed_message: closedMsg,
+      },
+      create: {
+        setting_key: 'career_settings',
+        setting_value: settingValue,
+        closed_message: closedMsg,
+      },
+    });
+
+    sendSuccess(res, 200, 'Pengaturan karir berhasil disimpan di database', body);
+  } catch (error) {
+    sendError(res, 500, 'Gagal memperbarui pengaturan karir', (error as Error).message);
   }
 };
 
