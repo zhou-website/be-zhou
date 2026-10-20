@@ -61,6 +61,9 @@ const frontendUrls = (process.env.FRONTEND_URL || '')
 // Comprehensive CORS configuration with origin whitelist (Server IP, Vercel frontend, localhost, domain)
 const allowedOrigins = [
   ...frontendUrls,
+  'https://fe-zhou-git-dev-consultingzhou-1911.vercel.app',
+  'https://fe-zhou-git-main-consultingzhou-1911.vercel.app',
+  'https://fe-zhou.vercel.app',
   'http://139.190.103.80',
   'https://139.190.103.80',
   'http://139.190.103.80:5000',
@@ -79,10 +82,12 @@ const allowedOrigins = [
   'http://api.zhouconsulting.id',
   'http://localhost:3000',
   'http://localhost:3001',
+  'http://localhost:3002',
   'http://localhost:5173',
   'http://localhost:5174',
   'http://127.0.0.1:3000',
   'http://127.0.0.1:3001',
+  'http://127.0.0.1:3002',
   'http://127.0.0.1:5173',
   'http://127.0.0.1:5174',
 ].filter(Boolean) as string[];
