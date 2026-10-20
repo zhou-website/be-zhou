@@ -15,8 +15,12 @@
       "description": "VPS Biznet Gio (Live Server)"
     },
     {
+      "url": "https://api.zhouconsulting.id",
+      "description": "Production Domain (api.zhouconsulting.id)"
+    },
+    {
       "url": "https://api.zhouconsulting.com",
-      "description": "Production Domain (api.zhouconsulting.com)"
+      "description": "Alternative Domain (api.zhouconsulting.com)"
     },
     {
       "url": "http://localhost:5000",
