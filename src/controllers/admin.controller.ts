@@ -278,10 +278,21 @@ export const updateConsultation = async (req: Request, res: Response): Promise<v
       updateData.progress_percent = parsedProgress;
     }
 
-    // 2. Update Catatan Konsultasi (description)
-    const rawNotes = description !== undefined ? description : (notes !== undefined ? notes : catatan);
-    if (rawNotes !== undefined) {
-      updateData.description = typeof rawNotes === 'string' ? rawNotes : String(rawNotes);
+    // 2. Update Catatan Konsultasi & Pesan (description vs notes)
+    if (description !== undefined && typeof description === 'string' && description.trim().length > 0) {
+      updateData.description = description.trim();
+    }
+    const rawNotes = notes !== undefined ? notes : catatan;
+    if (rawNotes !== undefined && String(rawNotes).trim().length > 0 && userId) {
+      // Rekam catatan staf sebagai ConsultationMessage agar tidak menimpa deskripsi asli klien
+      await prisma.consultationMessage.create({
+        data: {
+          project_id: projectId,
+          sender_id: userId,
+          sender_role: userRole || 'ADMIN',
+          message: String(rawNotes).trim(),
+        },
+      });
     }
 
     // 3. Update Title (jika disertakan)
@@ -849,5 +860,97 @@ export const updateConsultationPriority = async (req: Request, res: Response): P
     sendError(res, 500, 'Gagal mengubah prioritas konsultasi', (error as Error).message);
   }
 };
+
+export const createAdminMessage = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const adminId = req.user?.id;
+    const userRole = (req.user?.role || 'ADMIN').toUpperCase();
+    const projectId = parseInt(String(req.params.id), 10);
+    const { message } = req.body || {};
+
+    if (isNaN(projectId)) {
+      sendError(res, 400, 'ID perikatan tidak valid');
+      return;
+    }
+    if (!message || String(message).trim().length === 0) {
+      sendError(res, 400, 'Catatan konsultan tidak boleh kosong');
+      return;
+    }
+
+    const project = await prisma.consultationProject.findUnique({
+      where: { id: projectId },
+    });
+
+    if (!project) {
+      sendError(res, 404, 'Tiket konsultasi tidak ditemukan');
+      return;
+    }
+
+    const newMsg = await prisma.consultationMessage.create({
+      data: {
+        project_id: projectId,
+        sender_id: adminId!,
+        sender_role: userRole,
+        message: String(message).trim(),
+      },
+      include: {
+        sender: {
+          select: { id: true, name: true, role: true },
+        },
+      },
+    });
+
+    sendSuccess(res, 201, 'Catatan konsultan berhasil disimpan', {
+      id: newMsg.id,
+      project_id: newMsg.project_id,
+      sender_id: newMsg.sender_id,
+      sender_name: newMsg.sender?.name || 'Konsultan Zhou',
+      sender_role: newMsg.sender_role,
+      message: newMsg.message,
+      created_at: newMsg.created_at,
+    });
+  } catch (error) {
+    sendError(res, 500, 'Gagal menyimpan catatan konsultan', (error as Error).message);
+  }
+};
+
+export const updateConsultationMilestones = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const projectId = parseInt(String(req.params.id), 10);
+    const { milestones } = req.body || {};
+
+    if (isNaN(projectId)) {
+      sendError(res, 400, 'ID perikatan tidak valid');
+      return;
+    }
+
+    if (!milestones || !Array.isArray(milestones)) {
+      sendError(res, 400, 'Daftar tahapan milestones harus berupa array');
+      return;
+    }
+
+    const project = await prisma.consultationProject.findUnique({
+      where: { id: projectId },
+    });
+
+    if (!project) {
+      sendError(res, 404, 'Tiket konsultasi tidak ditemukan');
+      return;
+    }
+
+    const updated = await prisma.consultationProject.update({
+      where: { id: projectId },
+      data: { milestones },
+    });
+
+    sendSuccess(res, 200, 'Tahapan milestones perikatan berhasil diperbarui', {
+      project_id: updated.id,
+      milestones: updated.milestones,
+    });
+  } catch (error) {
+    sendError(res, 500, 'Gagal memperbarui tahapan milestones', (error as Error).message);
+  }
+};
+
 
 

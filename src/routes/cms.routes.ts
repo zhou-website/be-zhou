@@ -26,6 +26,16 @@ import {
   updateFaq,
   deleteFaq,
   updateContactSettings,
+  updateJobApplicationStatus,
+  updateServiceDetails,
+  toggleServiceStatus,
+  toggleRegulationStatus,
+  toggleEducationStatus,
+  batchUpdateTaxRates,
+  getLearningLinks,
+  createLearningLink,
+  updateLearningLink,
+  deleteLearningLink,
 } from '../controllers/cms.controller.js';
 import { requireAuth, requireRole } from '../middlewares/auth.middleware.js';
 import { flexibleUploadMiddleware } from '../middlewares/upload.middleware.js';
@@ -41,23 +51,33 @@ router.put('/company-profiles', updateCompanyProfile);
 // Services
 router.post('/services', createService);
 router.put('/services/:id', updateService);
+router.put('/services/:id/details', updateServiceDetails);
+router.patch('/services/:id/status', toggleServiceStatus);
 router.delete('/services/:id', deleteService);
 
 // Tax Rates
 router.post('/tax-rates', createTaxRate);
+router.post('/tax-rates/batch', batchUpdateTaxRates);
 router.put('/tax-rates/:id', updateTaxRate);
 router.delete('/tax-rates/:id', deleteTaxRate);
 
 // Regulations
 router.post('/regulations', flexibleUploadMiddleware, createRegulation);
 router.put('/regulations/:id', flexibleUploadMiddleware, updateRegulation);
+router.patch('/regulations/:id/status', toggleRegulationStatus);
 router.delete('/regulations/:id', deleteRegulation);
 
 // Education
 router.post('/education', flexibleUploadMiddleware, createEducation);
 router.put('/education/:id', flexibleUploadMiddleware, updateEducation);
+router.patch('/education/:id/status', toggleEducationStatus);
 router.delete('/education/:id', deleteEducation);
 
+// Learning Links (Modul Belajar Pajak)
+router.get('/learning-links', getLearningLinks);
+router.post('/learning-links', createLearningLink);
+router.put('/learning-links/:id', updateLearningLink);
+router.delete('/learning-links/:id', deleteLearningLink);
 
 // Careers & Applications
 router.post('/careers', createCareer);
@@ -66,6 +86,7 @@ router.delete('/careers/:id', deleteCareer);
 router.get('/career-settings', getCareerSettings);
 router.put('/career-settings', updateCareerSettings);
 router.get('/job-applications', getJobApplications);
+router.patch('/job-applications/:id/status', updateJobApplicationStatus);
 router.get('/job-applications/:id/download', downloadJobApplicationCv);
 router.delete('/job-applications/:id', deleteJobApplication);
 

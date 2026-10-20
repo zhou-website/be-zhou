@@ -20,13 +20,13 @@ describe('🚀 File Upload & Supabase Storage Integration Tests', () => {
       });
     });
 
-    // Obtain admin token for CMS upload endpoints
+    // Obtain superadmin token for CMS upload endpoints
     const res = await fetch(`${baseUrl}/api/v1/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        email: 'admin@zhouconsulting.com',
-        password: 'Admin123!',
+        email: 'superadmin@zhouconsulting.com',
+        password: 'SuperAdmin123!',
       }),
     });
     const json = await res.json();

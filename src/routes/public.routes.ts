@@ -2,7 +2,9 @@ import { Router } from 'express';
 import {
   getCompanyProfiles,
   getServices,
+  getServiceByCode,
   getTaxRates,
+  getCurrentKmkTaxRates,
   getRegulations,
   getRegulationById,
   downloadRegulationFile,
@@ -12,11 +14,13 @@ import {
   getCareers,
   getCareerById,
   applyCareer,
+  applyGeneralCareer,
   getCareerSettings,
   getContactSettings,
   submitContactMessage,
   submitPublicConsultation,
   uploadPublicFile,
+  getLearningLinks,
 } from '../controllers/cms.controller.js';
 
 import { validate } from '../middlewares/validator.middleware.js';
@@ -28,7 +32,14 @@ const router = Router();
 
 router.get('/company-profiles', getCompanyProfiles);
 router.get('/services', getServices);
+router.get('/services/:code', getServiceByCode);
+
+// Tax Rates & Kurs KMK
 router.get('/tax-rates/latest', getTaxRates);
+router.get('/tax-rates/current-kmk', getCurrentKmkTaxRates);
+
+// Learning Links (Modul Belajar Pajak Publik)
+router.get('/learning-links', getLearningLinks);
 
 // Regulations & Download
 router.get('/regulations', getRegulations);
@@ -45,6 +56,7 @@ router.get('/careers', getCareers);
 router.get('/careers/settings', getCareerSettings);
 router.get('/career-settings', getCareerSettings);
 router.get('/careers/:id', getCareerById);
+router.post('/careers/general/apply', flexibleUploadMiddleware, applyGeneralCareer);
 router.post('/careers/:id/apply', flexibleUploadMiddleware, applyCareer);
 
 // Public File Upload Helper (misal upload CV, berkas edukasi, atau formulir publik ke Supabase Storage)
@@ -60,4 +72,3 @@ router.get('/chatbot/tree', getChatbotTree);
 router.get('/chatbot', getChatbotTree);
 
 export default router;
-

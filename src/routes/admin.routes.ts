@@ -16,7 +16,10 @@ import {
   archiveConsultation,
   updateConsultationPriority,
   getClients,
+  createAdminMessage,
+  updateConsultationMilestones,
 } from '../controllers/admin.controller.js';
+import { getConsultationMessages } from '../controllers/client.controller.js';
 import { requireAuth, requireRole } from '../middlewares/auth.middleware.js';
 import { consultationDocUploadMiddleware } from '../middlewares/upload.middleware.js';
 import { validate } from '../middlewares/validator.middleware.js';
@@ -45,6 +48,12 @@ router.patch('/consultations/:id/assign', assignConsultationPic);
 router.post('/consultations/:id/tasks', validate(addTaskSchema), addProjectTask);
 router.patch('/consultations/:id/tasks/:taskId', validate(toggleTaskSchema), toggleProjectTask);
 router.post('/consultations/:id/documents', consultationDocUploadMiddleware, uploadDocument);
+
+// Tiket Chat & Catatan Konsultan & Milestones
+router.post('/consultations/:id/messages', createAdminMessage);
+router.get('/consultations/:id/messages', getConsultationMessages);
+router.put('/consultations/:id/milestones', updateConsultationMilestones);
+
 router.get('/documents', getGlobalDocuments);
 router.delete('/documents/:id', deleteDocument);
 

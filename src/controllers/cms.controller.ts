@@ -1442,3 +1442,441 @@ export const updateCareerSettings = async (req: Request, res: Response): Promise
   }
 };
 
+// --- Modul Rekrutmen & Pelamar Karir ---
+export const updateJobApplicationStatus = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    const { status } = req.body || {};
+    if (isNaN(id)) {
+      sendError(res, 400, 'ID pelamar kerja tidak valid');
+      return;
+    }
+
+    if (!status) {
+      sendError(res, 400, 'Status seleksi pelamar wajib diisi');
+      return;
+    }
+
+    const updated = await prisma.jobApplication.update({
+      where: { id },
+      data: { status: String(status).trim() },
+    });
+
+    sendSuccess(res, 200, 'Status seleksi pelamar kerja berhasil diperbarui', {
+      id: updated.id,
+      status: updated.status,
+    });
+  } catch (error) {
+    sendError(res, 500, 'Gagal memperbarui status lamaran', (error as Error).message);
+  }
+};
+
+export const applyGeneralCareer = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const body = req.body || {};
+    const applicant_name = body.applicant_name || body.name || body.fullName || body.full_name;
+    const applicant_email = body.applicant_email || body.email;
+    const applicant_phone = body.applicant_phone || body.phone || body.telephone || body.whatsapp || '';
+    const education = body.education || null;
+    const linkedin = body.linkedin || null;
+    const cover_letter = body.cover_letter || body.coverLetter || null;
+    let cv_file_path = body.cv_file_path || body.file_path || body.cv || body.cv_url || body.file_url || body.resume;
+
+    const file = getUploadedFile(req);
+    if (file) {
+      const uploadResult = await uploadFileToStorage(file.originalname, file.buffer, file.mimetype, 'cvs');
+      cv_file_path = uploadResult.filePath;
+    }
+
+    if (!applicant_name || !applicant_email) {
+      sendError(res, 400, 'Nama lengkap dan email pelamar wajib diisi');
+      return;
+    }
+
+    if (!cv_file_path) {
+      sendError(res, 400, 'Berkas CV wajib diunggah (PDF, DOCX maks 5MB)');
+      return;
+    }
+
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+    const registrationCode = body.registration_code || `ZHOU-REC-${new Date().getFullYear()}-${randomSuffix}`;
+
+    const application = await prisma.jobApplication.create({
+      data: {
+        job_id: null, // General Talent Pool
+        applicant_name: String(applicant_name).trim(),
+        applicant_email: String(applicant_email).trim().toLowerCase(),
+        applicant_phone: String(applicant_phone).trim(),
+        education: education ? String(education).trim() : null,
+        linkedin: linkedin ? String(linkedin).trim() : null,
+        cover_letter: cover_letter ? String(cover_letter).trim() : null,
+        registration_code: registrationCode,
+        status: 'Review HR',
+        cv_file_path,
+      },
+    });
+
+    sendSuccess(res, 201, 'Lamaran berhasil didaftarkan ke talent pool', {
+      registration_code: registrationCode,
+      application_id: application.id,
+    });
+  } catch (error) {
+    sendError(res, 500, 'Gagal mendaftarkan lamaran ke talent pool', (error as Error).message);
+  }
+};
+
+// --- Modul Katalog Detail Layanan Bisnis ---
+export const getServiceByCode = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const rawCode = String(req.params.code || '').trim();
+    if (!rawCode) {
+      sendError(res, 400, 'Kode layanan wajib diisi');
+      return;
+    }
+
+    const normalizedCode = rawCode.toUpperCase().replace(/-/g, '_');
+    const service = await prisma.service.findFirst({
+      where: {
+        OR: [
+          { service_code: { equals: rawCode, mode: 'insensitive' } },
+          { service_code: { equals: normalizedCode, mode: 'insensitive' } },
+          ...(isNaN(Number(rawCode)) ? [] : [{ id: Number(rawCode) }]),
+        ],
+      },
+    });
+
+    if (!service) {
+      sendError(res, 404, 'Detail layanan tidak ditemukan');
+      return;
+    }
+
+    const defaults = getServiceDefaults(service.service_code, service.service_name);
+    let meta: any = {};
+    if (service.metadata) {
+      meta = typeof service.metadata === 'string' ? JSON.parse(service.metadata) : service.metadata;
+    }
+
+    let features: any = defaults.features;
+    if (service.features) {
+      try {
+        features = typeof service.features === 'string' && service.features.startsWith('[')
+          ? JSON.parse(service.features)
+          : service.features;
+      } catch {
+        features = defaults.features;
+      }
+    }
+
+    sendSuccess(res, 200, 'Berhasil memuat detail layanan', {
+      id: service.id,
+      service_code: service.service_code,
+      service_name: service.service_name,
+      category: service.category,
+      description: service.description,
+      card_explanation: service.card_explanation || defaults.card_explanation,
+      features,
+      is_active: service.is_active,
+      pillars: meta.pillars || [],
+      workflow: meta.workflow || [],
+      deliverables: meta.deliverables || [],
+      scopes: meta.scopes || [],
+      faqs: meta.faqs || [],
+      wa_template: meta.wa_template || '',
+      updated_at: service.updated_at,
+    });
+  } catch (error) {
+    sendError(res, 500, 'Gagal memuat detail layanan', (error as Error).message);
+  }
+};
+
+export const updateServiceDetails = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    if (isNaN(id)) {
+      sendError(res, 400, 'ID layanan tidak valid');
+      return;
+    }
+
+    const service = await prisma.service.findUnique({ where: { id } });
+    if (!service) {
+      sendError(res, 404, 'Layanan tidak ditemukan');
+      return;
+    }
+
+    const updated = await prisma.service.update({
+      where: { id },
+      data: {
+        metadata: req.body,
+      },
+    });
+
+    sendSuccess(res, 200, 'Detail struktural layanan berhasil diperbarui', {
+      id: updated.id,
+      service_code: updated.service_code,
+      updated_at: updated.updated_at,
+    });
+  } catch (error) {
+    sendError(res, 500, 'Gagal memperbarui detail layanan', (error as Error).message);
+  }
+};
+
+export const toggleServiceStatus = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    const { is_active } = req.body || {};
+    if (isNaN(id)) {
+      sendError(res, 400, 'ID layanan tidak valid');
+      return;
+    }
+
+    const updated = await prisma.service.update({
+      where: { id },
+      data: { is_active: Boolean(is_active) },
+    });
+
+    sendSuccess(res, 200, 'Status publikasi layanan berhasil diperbarui', {
+      id: updated.id,
+      is_active: updated.is_active,
+    });
+  } catch (error) {
+    sendError(res, 500, 'Gagal memperbarui status layanan', (error as Error).message);
+  }
+};
+
+// --- Modul Belajar Pajak & Tautan Portal Resmi DJP ---
+export const getLearningLinks = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const showAll = req.query.all === 'true';
+    const where = showAll ? {} : { is_active: true };
+    const links = await prisma.learningLink.findMany({
+      where,
+      orderBy: { created_at: 'asc' },
+    });
+    sendSuccess(res, 200, 'Berhasil memuat tautan modul belajar pajak', links);
+  } catch (error) {
+    sendError(res, 500, 'Gagal memuat tautan belajar', (error as Error).message);
+  }
+};
+
+export const createLearningLink = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { title, url, category, description, is_active } = req.body || {};
+    if (!title || !url || !category) {
+      sendError(res, 400, 'Judul, tautan URL, dan kategori wajib diisi');
+      return;
+    }
+
+    const item = await prisma.learningLink.create({
+      data: {
+        title: String(title).trim(),
+        url: String(url).trim(),
+        category: String(category).trim(),
+        description: description ? String(description).trim() : null,
+        is_active: is_active !== undefined ? Boolean(is_active) : true,
+      },
+    });
+
+    sendSuccess(res, 201, 'Tautan portal belajar berhasil ditambahkan', {
+      id: item.id,
+      title: item.title,
+    });
+  } catch (error) {
+    sendError(res, 500, 'Gagal menambahkan tautan belajar', (error as Error).message);
+  }
+};
+
+export const updateLearningLink = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    if (isNaN(id)) {
+      sendError(res, 400, 'ID tautan belajar tidak valid');
+      return;
+    }
+
+    const { title, url, category, description, is_active } = req.body || {};
+    const updated = await prisma.learningLink.update({
+      where: { id },
+      data: {
+        ...(title !== undefined && { title: String(title).trim() }),
+        ...(url !== undefined && { url: String(url).trim() }),
+        ...(category !== undefined && { category: String(category).trim() }),
+        ...(description !== undefined && { description: String(description).trim() }),
+        ...(is_active !== undefined && { is_active: Boolean(is_active) }),
+      },
+    });
+
+    sendSuccess(res, 200, 'Tautan portal belajar berhasil diperbarui', {
+      id: updated.id,
+      updated: true,
+    });
+  } catch (error) {
+    sendError(res, 500, 'Gagal memperbarui tautan belajar', (error as Error).message);
+  }
+};
+
+export const deleteLearningLink = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    if (isNaN(id)) {
+      sendError(res, 400, 'ID tautan belajar tidak valid');
+      return;
+    }
+
+    await prisma.learningLink.delete({ where: { id } });
+    sendSuccess(res, 200, 'Tautan portal berhasil dihapus');
+  } catch (error) {
+    sendError(res, 500, 'Gagal menghapus tautan belajar', (error as Error).message);
+  }
+};
+
+// --- Modul Kurs Pajak KMK Mingguan (Batch Update & Full Sync) ---
+export const batchUpdateTaxRates = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { kmk_number, period_start, period_end, rates } = req.body || {};
+
+    if (!kmk_number || !rates || !Array.isArray(rates) || rates.length === 0) {
+      sendError(res, 400, 'Nomor KMK dan daftar rates wajib diisi');
+      return;
+    }
+
+    const startDate = period_start ? new Date(period_start) : new Date();
+    const endDate = period_end ? new Date(period_end) : new Date(startDate.getTime() + 7 * 86400000);
+
+    // Simpan seluruh kurs KMK secara serentak
+    await prisma.$transaction(
+      rates.map((r: any) =>
+        prisma.taxRate.create({
+          data: {
+            currency_code: String(r.currency_code).toUpperCase(),
+            rate_value: Number(r.rate_value),
+            effective_start_date: startDate,
+            effective_end_date: endDate,
+            kmk_number: String(kmk_number).trim(),
+            change: r.change ? String(r.change) : null,
+            trend: r.trend ? String(r.trend) : null,
+          },
+        })
+      )
+    );
+
+    try {
+      await redis.del('cache:tax_rates');
+    } catch {
+      // Redis optional / offline in dev
+    }
+
+    sendSuccess(res, 201, 'Seluruh kurs KMK pekan berjalan berhasil disimpan secara serentak', {
+      inserted_count: rates.length,
+      kmk_number,
+    });
+  } catch (error) {
+    sendError(res, 500, 'Gagal melakukan batch update kurs KMK', (error as Error).message);
+  }
+};
+
+export const getCurrentKmkTaxRates = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const latestRateWithKmk = await prisma.taxRate.findFirst({
+      where: { kmk_number: { not: null } },
+      orderBy: { created_at: 'desc' },
+    });
+
+    let kmkNumber = latestRateWithKmk?.kmk_number || 'KMK Nomor 48/MK/EF.2/2026';
+    let rates = await prisma.taxRate.findMany({
+      where: { kmk_number: kmkNumber },
+      orderBy: { currency_code: 'asc' },
+    });
+
+    if (rates.length === 0) {
+      rates = await prisma.taxRate.findMany({
+        orderBy: { created_at: 'desc' },
+        take: 25,
+      });
+    }
+
+    const firstRate = rates[0];
+    let periodStr = 'Pekan Berjalan';
+    if (firstRate?.effective_start_date) {
+      const startStr = firstRate.effective_start_date.toLocaleDateString('id-ID', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      });
+      const endStr = firstRate.effective_end_date
+        ? firstRate.effective_end_date.toLocaleDateString('id-ID', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+          })
+        : '';
+      periodStr = endStr ? `${startStr} - ${endStr}` : startStr;
+    }
+
+    const formattedRates = rates.map((r) => ({
+      id: r.id,
+      currency_code: r.currency_code,
+      rate_value: Number(r.rate_value),
+      change: r.change || '+0.00',
+      trend: r.trend || 'neutral',
+      effective_start_date: r.effective_start_date,
+      effective_end_date: r.effective_end_date,
+    }));
+
+    sendSuccess(res, 200, 'Data kurs pajak KMK terupdate berhasil dimuat', {
+      kmk_number: kmkNumber,
+      period: periodStr,
+      rates: formattedRates,
+    });
+  } catch (error) {
+    sendError(res, 500, 'Gagal memuat data kurs pajak KMK terkini', (error as Error).message);
+  }
+};
+
+// --- Modul Toggle Status Publikasi CMS ---
+export const toggleRegulationStatus = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    const { is_active } = req.body || {};
+    if (isNaN(id)) {
+      sendError(res, 400, 'ID regulasi tidak valid');
+      return;
+    }
+
+    const updated = await prisma.regulation.update({
+      where: { id },
+      data: { is_active: Boolean(is_active) },
+    });
+
+    sendSuccess(res, 200, 'Status tayang regulasi berhasil diperbarui', {
+      id: updated.id,
+      is_active: updated.is_active,
+    });
+  } catch (error) {
+    sendError(res, 500, 'Gagal memperbarui status regulasi', (error as Error).message);
+  }
+};
+
+export const toggleEducationStatus = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    const { is_active } = req.body || {};
+    if (isNaN(id)) {
+      sendError(res, 400, 'ID artikel edukasi tidak valid');
+      return;
+    }
+
+    const updated = await prisma.educationContent.update({
+      where: { id },
+      data: { is_active: Boolean(is_active) },
+    });
+
+    sendSuccess(res, 200, 'Status tayang artikel edukasi berhasil diperbarui', {
+      id: updated.id,
+      is_active: updated.is_active,
+    });
+  } catch (error) {
+    sendError(res, 500, 'Gagal memperbarui status artikel edukasi', (error as Error).message);
+  }
+};
+
+
