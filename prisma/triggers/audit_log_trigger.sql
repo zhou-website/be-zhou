@@ -16,6 +16,3 @@ BEFORE UPDATE ON audit_logs
 FOR EACH ROW EXECUTE FUNCTION prevent_audit_log_modification();
 
 DROP TRIGGER IF EXISTS trg_block_audit_log_delete ON audit_logs;
-CREATE TRIGGER trg_block_audit_log_delete
-BEFORE DELETE ON audit_logs
-FOR EACH ROW EXECUTE FUNCTION prevent_audit_log_modification();

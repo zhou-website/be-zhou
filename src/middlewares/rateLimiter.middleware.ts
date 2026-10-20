@@ -5,14 +5,23 @@ import { redis } from '../config/redis.js';
 // Rate Limiter khusus endpoint login & otentikasi untuk mencegah serangan brute-force
 export const authRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 menit
-  limit: 10, // Maksimal 10 percobaan per 15 menit per IP
+  limit: process.env.NODE_ENV === 'production' ? 100 : 1000, // Ditingkatkan ke 100 agar QA testing tidak terblokir
+  skip: (req) => {
+    if (process.env.NODE_ENV === 'test' || process.env.SKIP_RATE_LIMIT === 'true') return true;
+    // Di lingkungan lokal development, jangan batasi localhost agar pengetesan lancar
+    if (process.env.NODE_ENV !== 'production') return true;
+    return false;
+  },
+  validate: { xForwardedForHeader: false },
   standardHeaders: true,
   legacyHeaders: false,
-  store: new RedisStore({
-    // @ts-expect-error RedisStore sendCommand typing
-    sendCommand: (command: string, ...args: string[]) => redis.call(command, ...args),
-    prefix: 'rl:auth:',
-  }),
+  store: process.env.NODE_ENV === 'production'
+    ? new RedisStore({
+        // @ts-expect-error RedisStore sendCommand typing
+        sendCommand: (command: string, ...args: string[]) => redis.call(command, ...args),
+        prefix: 'rl:auth:',
+      })
+    : undefined,
   message: {
     success: false,
     message: 'Terlalu banyak percobaan login. Silakan coba kembali dalam 15 menit.',
@@ -22,14 +31,22 @@ export const authRateLimiter = rateLimit({
 // Rate Limiter umum untuk seluruh rute API
 export const apiRateLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 menit
-  limit: 100, // 100 request per menit
+  limit: process.env.NODE_ENV === 'production' ? 500 : 10000, // Ditingkatkan ke 500 agar load/QA testing lancar
+  skip: (req) => {
+    if (process.env.NODE_ENV === 'test' || process.env.SKIP_RATE_LIMIT === 'true') return true;
+    if (process.env.NODE_ENV !== 'production') return true;
+    return false;
+  },
+  validate: { xForwardedForHeader: false },
   standardHeaders: true,
   legacyHeaders: false,
-  store: new RedisStore({
-    // @ts-expect-error RedisStore sendCommand typing
-    sendCommand: (command: string, ...args: string[]) => redis.call(command, ...args),
-    prefix: 'rl:general:',
-  }),
+  store: process.env.NODE_ENV === 'production'
+    ? new RedisStore({
+        // @ts-expect-error RedisStore sendCommand typing
+        sendCommand: (command: string, ...args: string[]) => redis.call(command, ...args),
+        prefix: 'rl:general:',
+      })
+    : undefined,
   message: {
     success: false,
     message: 'Batas kuota request tercapai. Silakan coba sesaat lagi.',

@@ -28,6 +28,7 @@ model User {
 
   // Relations
   consultations_projects ConsultationProject[]
+  assigned_projects      ConsultationProject[] @relation("AssignedAdminProjects")
   audit_logs             AuditLog[]            @relation("AdminAuditLogs")
   client_audit_logs      AuditLog[]            @relation("ClientAuditLogs")
   company_profiles       CompanyProfile[]
@@ -40,14 +41,16 @@ model User {
 
 // 2. Services (Accounting Service, Business Financial Consulting, Legal, Tax Service Core)
 model Service {
-  id           Int      @id @default(autoincrement())
-  service_code String   @unique @db.VarChar(50)
-  service_name String   @db.VarChar(255)
-  category     String   @db.VarChar(100)
-  description  String?  @db.Text
-  is_active    Boolean  @default(true)
-  created_at   DateTime @default(now()) @db.Timestamp(6)
-  updated_at   DateTime @updatedAt @db.Timestamp(6)
+  id               Int      @id @default(autoincrement())
+  service_code     String   @unique @db.VarChar(50)
+  service_name     String   @db.VarChar(255)
+  category         String   @db.VarChar(100)
+  description      String?  @db.Text
+  card_explanation String?  @db.Text
+  features         String?  @db.Text
+  is_active        Boolean  @default(true)
+  created_at       DateTime @default(now()) @db.Timestamp(6)
+  updated_at       DateTime @updatedAt @db.Timestamp(6)
 
   // Relations
   consultations_projects ConsultationProject[]
@@ -57,23 +60,27 @@ model Service {
 
 // 3. Consultations Projects (Client Project Ticket & Engagement)
 model ConsultationProject {
-  id               Int      @id @default(autoincrement())
-  project_code     String   @unique @db.VarChar(50)
-  client_id        Int
-  service_id       Int
-  title            String   @db.VarChar(255)
-  description      String?  @db.Text
-  status           String   @default("IN_PROGRESS") @db.VarChar(50) // IN_PROGRESS, COMPLETED
-  progress_percent Int      @default(0)
-  created_at       DateTime @default(now()) @db.Timestamp(6)
-  updated_at       DateTime @updatedAt @db.Timestamp(6)
+  id                Int      @id @default(autoincrement())
+  project_code      String   @unique @db.VarChar(50)
+  client_id         Int
+  service_id        Int
+  assigned_admin_id Int?
+  title             String   @db.VarChar(255)
+  description       String?  @db.Text
+  status            String   @default("IN_PROGRESS") @db.VarChar(50) // IN_PROGRESS, COMPLETED
+  progress_percent  Int      @default(0)
+  is_archived       Boolean  @default(false)
+  priority          String   @default("Normal") @db.VarChar(50)
+  created_at        DateTime @default(now()) @db.Timestamp(6)
+  updated_at        DateTime @updatedAt @db.Timestamp(6)
 
   // Relations
-  client     User              @relation(fields: [client_id], references: [id])
-  service    Service           @relation(fields: [service_id], references: [id])
-  tasks      ProjectTask[]
-  documents  ProjectDocument[]
-  audit_logs AuditLog[]
+  client         User              @relation(fields: [client_id], references: [id])
+  service        Service           @relation(fields: [service_id], references: [id])
+  assigned_admin User?             @relation("AssignedAdminProjects", fields: [assigned_admin_id], references: [id])
+  tasks          ProjectTask[]
+  documents      ProjectDocument[]
+  audit_logs     AuditLog[]
 
   @@map("consultations_projects")
 }
@@ -154,6 +161,8 @@ model Regulation {
   regulation_type String   @db.VarChar(100)
   file_path       String   @db.VarChar(500)
   file_size       String   @db.VarChar(50)
+  legal_status    String?  @default("Berlaku") @db.VarChar(50)
+  replacement_ref String?  @db.VarChar(255)
   uploaded_by     Int?
   created_at      DateTime @default(now()) @db.Timestamp(6)
 
@@ -183,6 +192,7 @@ model EducationContent {
   content_type String   @db.VarChar(50) // ARTICLE, GUIDE
   body         String   @db.Text
   file_path    String?  @db.VarChar(500)
+  image_url    String?  @db.VarChar(500)
   created_by   Int?
   created_at   DateTime @default(now()) @db.Timestamp(6)
   updated_at   DateTime @updatedAt @db.Timestamp(6)

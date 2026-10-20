@@ -7,7 +7,11 @@ import { redis } from '../config/redis.js';
 import { sendSuccess, sendError } from '../utils/response.js';
 import { sendPasswordResetEmail } from '../services/email.service.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'zhou_consulting_jwt_secret_dev_key_2026';
+import { OAuth2Client } from 'google-auth-library';
+import { JWT_SECRET } from '../config/jwt.js';
+
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const googleClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
 
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -55,13 +59,29 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body || {};
-
-    if (!email || !password) {
-      sendError(res, 400, 'Email dan kata sandi wajib diisi');
+    const cleanInput = String(email || '').trim();
+    if (!cleanInput || !password) {
+      sendError(res, 400, 'Email/ID Pengguna dan kata sandi wajib diisi');
       return;
     }
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    const isEmailLike = cleanInput.includes('@');
+    const alternateEmail = isEmailLike
+      ? cleanInput.endsWith('.com')
+        ? cleanInput.replace(/\.com$/, '')
+        : `${cleanInput}.com`
+      : `${cleanInput}@zhouconsulting.com`;
+
+    const user = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { email: { equals: cleanInput, mode: 'insensitive' } },
+          { email: { equals: alternateEmail, mode: 'insensitive' } },
+          { name: { equals: cleanInput, mode: 'insensitive' } },
+        ],
+      },
+    });
+
     if (!user || !user.password) {
       sendError(res, 401, 'Kredensial email atau kata sandi tidak valid');
       return;
@@ -78,8 +98,12 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Hapus status revoked jika sebelumnya ada
-    await redis.del(`user_revoked:${user.id}`);
+    // Hapus status revoked jika sebelumnya ada (abaikan jika Redis offline)
+    try {
+      await redis.del(`user_revoked:${user.id}`);
+    } catch {
+      // Redis offline/error diabaikan
+    }
 
     const jti = crypto.randomUUID();
     const token = jwt.sign(
@@ -107,27 +131,63 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
 export const googleLogin = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { email, name } = req.body || {};
+    let email = req.body?.email;
+    let name = req.body?.name;
+    const idToken = req.body?.id_token || req.body?.credential || req.body?.token;
 
-    if (!email) {
-      sendError(res, 400, 'Data Google OAuth tidak lengkap');
+    // Jika frontend mengirimkan ID token Google, verifikasi secara kriptografis
+    if (idToken && googleClient && GOOGLE_CLIENT_ID) {
+      try {
+        const ticket = await googleClient.verifyIdToken({
+          idToken,
+          audience: GOOGLE_CLIENT_ID,
+        });
+        const payload = ticket.getPayload();
+        if (payload?.email) {
+          email = payload.email;
+          name = payload.name || name || 'Google Client User';
+        }
+      } catch (verifyErr) {
+        sendError(res, 401, 'Token Google OAuth tidak valid atau telah kedaluwarsa');
+        return;
+      }
+    } else if (process.env.NODE_ENV === 'production' && GOOGLE_CLIENT_ID) {
+      sendError(res, 400, 'ID token Google OAuth wajib disertakan di lingkungan produksi');
       return;
     }
 
-    // Google OAuth hanya untuk role USER/Klien (PRD requirement)
-    let user = await prisma.user.findUnique({ where: { email } });
-
-    if (!user) {
-      user = await prisma.user.create({
-        data: {
-          name: name || 'Google Client User',
-          email,
-          role: 'USER',
-        },
-      });
+    if (!email) {
+      sendError(res, 400, 'Data Google OAuth tidak lengkap. Sediakan id_token atau email.');
+      return;
     }
 
-    if (!user.is_active) {
+    // Google OAuth hanya untuk role USER/Klien (PRD requirement: Staf Admin dilarang login via Google)
+    let user: any = null;
+    let isDbAvailable = true;
+
+    try {
+      user = await prisma.user.findUnique({ where: { email } });
+
+      if (user && user.role !== 'USER') {
+        sendError(res, 403, 'Akses ditolak: Akun staf admin tidak diperkenankan login melalui Google OAuth. Silakan login via email dan kata sandi.');
+        return;
+      }
+
+      if (!user) {
+        user = await prisma.user.create({
+          data: {
+            name: name || 'Google Client User',
+            email,
+            role: 'USER',
+          },
+        });
+      }
+    } catch (dbErr) {
+      sendError(res, 500, 'Gagal memproses otentikasi pengguna di database', (dbErr as Error).message);
+      return;
+    }
+
+    if (user && !user.is_active) {
       sendError(res, 403, 'Akun dinonaktifkan');
       return;
     }
@@ -150,6 +210,7 @@ export const googleLogin = async (req: Request, res: Response): Promise<void> =>
       },
     });
   } catch (error) {
+    console.error('❌ Error in googleLogin:', error);
     sendError(res, 500, 'Gagal memproses login Google', (error as Error).message);
   }
 };

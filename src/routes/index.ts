@@ -17,5 +17,8 @@ router.use('/admin', adminRoutes);
 router.use('/admin/cms', cmsRoutes);
 router.use('/superadmin', superadminRoutes);
 router.use('/public', publicRoutes);
+// Alias rute publik langsung di bawah /api/v1 (misal /api/v1/careers/:id/apply atau /api/v1/services)
+router.use('/', publicRoutes);
+
 
 export default router;

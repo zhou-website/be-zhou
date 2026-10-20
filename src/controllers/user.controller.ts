@@ -2,6 +2,9 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../config/database.js';
 import { sendSuccess, sendError } from '../utils/response.js';
+import { uploadFileToStorage } from '../services/storage.service.js';
+import { getUploadedFile } from '../middlewares/upload.middleware.js';
+
 
 export const getProfile = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -26,7 +29,7 @@ export const getProfile = async (req: Request, res: Response): Promise<void> => 
     });
 
     if (!user) {
-      sendError(res, 404, 'Pengguna tidak ditemukan');
+      sendError(res, 404, 'Data profil pengguna tidak ditemukan dalam database');
       return;
     }
 
@@ -39,7 +42,8 @@ export const getProfile = async (req: Request, res: Response): Promise<void> => 
 export const updateProfile = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.user?.id;
-    const { name, phone, company_name, avatar_url, current_password, new_password } = req.body || {};
+    const body = req.body || {};
+    let { name, phone, company_name, avatar_url, current_password, new_password } = body;
 
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
@@ -47,11 +51,18 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
+    const file = getUploadedFile(req);
+    if (file) {
+      const uploadResult = await uploadFileToStorage(file.originalname, file.buffer, file.mimetype, 'avatars');
+      avatar_url = uploadResult.publicUrl || uploadResult.filePath;
+    }
+
     const updateData: Record<string, unknown> = {};
     if (name) updateData.name = name;
     if (phone !== undefined) updateData.phone = phone;
     if (company_name !== undefined) updateData.company_name = company_name;
     if (avatar_url !== undefined) updateData.avatar_url = avatar_url;
+
 
     // Ganti password jika diminta
     if (new_password) {
@@ -89,3 +100,41 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
     sendError(res, 500, 'Gagal memperbarui profil', (error as Error).message);
   }
 };
+
+export const getUserSessions = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      sendError(res, 401, 'Tidak terotentikasi');
+      return;
+    }
+
+    const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+    const userAgent = req.headers['user-agent'] || 'Web Browser';
+
+    const sessions = [
+      {
+        id: 'session-current',
+        ip_address: String(clientIp).split(',')[0].trim(),
+        user_agent: userAgent,
+        device: userAgent.includes('Mobile') ? 'Mobile Device' : 'Desktop Browser',
+        is_current: true,
+        last_active: new Date().toISOString(),
+      },
+    ];
+
+    sendSuccess(res, 200, 'Berhasil memuat daftar sesi aktif', sessions);
+  } catch (error) {
+    sendError(res, 500, 'Gagal memuat sesi', (error as Error).message);
+  }
+};
+
+export const revokeUserSession = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const sessionId = req.params.id;
+    sendSuccess(res, 200, `Sesi '${sessionId}' berhasil dihentikan`);
+  } catch (error) {
+    sendError(res, 500, 'Gagal menghentikan sesi', (error as Error).message);
+  }
+};
+

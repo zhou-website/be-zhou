@@ -1,7 +1,10 @@
 import { Request, Response } from 'express';
+import path from 'path';
 import { prisma } from '../config/database.js';
 import { sendSuccess, sendError } from '../utils/response.js';
-import { uploadFileToStorage } from '../services/storage.service.js';
+import { uploadFileToStorage, getSignedDownloadUrl, deleteFileFromStorage } from '../services/storage.service.js';
+import { getUploadedFile } from '../middlewares/upload.middleware.js';
+
 
 export const getDashboardOverview = async (_req: Request, res: Response): Promise<void> => {
   try {
@@ -21,25 +24,45 @@ export const getDashboardOverview = async (_req: Request, res: Response): Promis
       total_documents: totalDocs,
     });
   } catch (error) {
-    sendError(res, 500, 'Gagal memuat overview admin', (error as Error).message);
+    sendError(res, 500, 'Gagal memuat statistik operasional admin', (error as Error).message);
   }
 };
 
 export const getConsultations = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { category, status, search } = req.query;
+    const userRole = (req.user?.role || '').toUpperCase();
+    const userId = req.user?.id;
+    const { category, status, search, assigned_admin_id } = req.query;
 
-    const where: Record<string, unknown> = {};
-    if (status) where.status = status as string;
+    const andConditions: Record<string, unknown>[] = [];
+    if (status) andConditions.push({ status: status as string });
     if (category) {
-      where.service = { category: category as string };
+      andConditions.push({ service: { category: category as string } });
     }
     if (search) {
-      where.OR = [
-        { title: { contains: search as string, mode: 'insensitive' } },
-        { project_code: { contains: search as string, mode: 'insensitive' } },
-      ];
+      andConditions.push({
+        OR: [
+          { title: { contains: search as string, mode: 'insensitive' } },
+          { project_code: { contains: search as string, mode: 'insensitive' } },
+        ],
+      });
     }
+
+    // Penugasan & Hak Akses PIC:
+    // Admin dapat melihat tiket yang ditugaskan kepada dirinya ATAU tiket baru yang belum dialokasikan PIC (unassigned).
+    // Superadmin memiliki akses penuh ke seluruh tiket dan dapat memfilter berdasarkan PIC.
+    if (userRole === 'ADMIN') {
+      andConditions.push({
+        OR: [
+          { assigned_admin_id: userId },
+          { assigned_admin_id: null },
+        ],
+      });
+    } else if (assigned_admin_id) {
+      andConditions.push({ assigned_admin_id: Number(assigned_admin_id) });
+    }
+
+    const where = andConditions.length > 0 ? { AND: andConditions } : {};
 
     const projects = await prisma.consultationProject.findMany({
       where,
@@ -50,16 +73,36 @@ export const getConsultations = async (req: Request, res: Response): Promise<voi
             name: true,
             email: true,
             company_name: true,
+            phone: true,
           },
         },
         service: true,
         tasks: true,
         documents: true,
+        assigned_admin: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            role: true,
+          },
+        },
       },
       orderBy: { created_at: 'desc' },
     });
 
-    sendSuccess(res, 200, 'Berhasil mengambil daftar konsultasi', projects);
+    const safeProjects = projects.map((p) => ({
+      ...p,
+      client: p.client
+        ? {
+            ...p.client,
+            company_name: p.client.company_name || p.client.name || 'Perusahaan Klien',
+          }
+        : undefined,
+    }));
+
+    sendSuccess(res, 200, 'Berhasil mengambil daftar konsultasi', safeProjects);
   } catch (error) {
     sendError(res, 500, 'Gagal mengambil daftar konsultasi', (error as Error).message);
   }
@@ -67,12 +110,14 @@ export const getConsultations = async (req: Request, res: Response): Promise<voi
 
 export const createConsultation = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { client_id, service_id, title, description, initial_tasks } = req.body || {};
+    const { client_id, service_id, title, description, initial_tasks, assigned_admin_id, admin_id } = req.body || {};
 
     if (!client_id || !service_id || !title) {
       sendError(res, 400, 'Client, jenis layanan, dan judul konsultasi wajib diisi');
       return;
     }
+
+    const targetAdminId = assigned_admin_id || admin_id;
 
     const code = `ZHOU-${Date.now().toString().slice(-6)}`;
 
@@ -81,6 +126,7 @@ export const createConsultation = async (req: Request, res: Response): Promise<v
         project_code: code,
         client_id: Number(client_id),
         service_id: Number(service_id),
+        assigned_admin_id: targetAdminId ? Number(targetAdminId) : null,
         title,
         description,
         status: 'IN_PROGRESS',
@@ -95,6 +141,14 @@ export const createConsultation = async (req: Request, res: Response): Promise<v
       },
       include: {
         tasks: true,
+        assigned_admin: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+          },
+        },
       },
     });
 
@@ -167,6 +221,199 @@ export const updateConsultationStatus = async (req: Request, res: Response): Pro
   }
 };
 
+export const updateConsultation = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userRole = (req.user?.role || '').toUpperCase();
+    const userId = req.user?.id;
+    const projectId = parseInt(String(req.params.id), 10);
+
+    if (isNaN(projectId)) {
+      sendError(res, 400, 'ID perikatan konsultasi tidak valid');
+      return;
+    }
+
+    const currentProject = await prisma.consultationProject.findUnique({
+      where: { id: projectId },
+      include: {
+        tasks: true,
+        assigned_admin: true,
+      },
+    });
+
+    if (!currentProject) {
+      sendError(res, 404, 'Perikatan konsultasi tidak ditemukan');
+      return;
+    }
+
+    // Hak akses PIC: Admin biasa hanya boleh memperbarui tiket yang ditugaskan kepadanya atau belum bertuan
+    if (userRole === 'ADMIN' && currentProject.assigned_admin_id !== null && currentProject.assigned_admin_id !== userId) {
+      sendError(res, 403, 'Akses ditolak: Anda bukan PIC Admin yang ditugaskan untuk tiket perikatan ini');
+      return;
+    }
+
+    const {
+      progress_percent,
+      progress,
+      progres,
+      assigned_admin_id,
+      admin_id,
+      pic_id,
+      description,
+      notes,
+      catatan,
+      status,
+      title,
+    } = req.body || {};
+
+    const updateData: Record<string, unknown> = {};
+
+    // 1. Update Progres (progress_percent: 0-100)
+    const rawProgress = progress_percent !== undefined ? progress_percent : (progress !== undefined ? progress : progres);
+    if (rawProgress !== undefined && rawProgress !== null && rawProgress !== '') {
+      const parsedProgress = parseInt(String(rawProgress), 10);
+      if (isNaN(parsedProgress) || parsedProgress < 0 || parsedProgress > 100) {
+        sendError(res, 400, 'Nilai progres harus berupa angka antara 0 hingga 100');
+        return;
+      }
+      updateData.progress_percent = parsedProgress;
+    }
+
+    // 2. Update Catatan Konsultasi (description)
+    const rawNotes = description !== undefined ? description : (notes !== undefined ? notes : catatan);
+    if (rawNotes !== undefined) {
+      updateData.description = typeof rawNotes === 'string' ? rawNotes : String(rawNotes);
+    }
+
+    // 3. Update Title (jika disertakan)
+    if (title !== undefined && String(title).trim().length > 0) {
+      updateData.title = String(title).trim();
+    }
+
+    // 4. Update PIC Admin (assigned_admin_id)
+    const rawPic = assigned_admin_id !== undefined ? assigned_admin_id : (pic_id !== undefined ? pic_id : admin_id);
+    let targetPicAdmin: { id: number; name: string; email: string } | null = null;
+
+    if (rawPic !== undefined && rawPic !== null && rawPic !== '') {
+      const targetAdminId = parseInt(String(rawPic), 10);
+      if (isNaN(targetAdminId)) {
+        sendError(res, 400, 'ID PIC Admin tidak valid');
+        return;
+      }
+
+      // Validasi wewenang: Hanya Superadmin yang berwenang menugaskan / mereassign PIC ke staf lain
+      if (userRole !== 'SUPERADMIN' && targetAdminId !== userId) {
+        sendError(res, 403, 'Hanya Superadmin yang berwenang menugaskan atau mengubah PIC tiket ke staf lain');
+        return;
+      }
+
+      const adminUser = await prisma.user.findFirst({
+        where: { id: targetAdminId, role: { in: ['ADMIN', 'SUPERADMIN'] }, is_active: true },
+        select: { id: true, name: true, email: true },
+      });
+
+      if (!adminUser) {
+        sendError(res, 404, 'PIC Admin staf tidak ditemukan atau akun sedang dinonaktifkan');
+        return;
+      }
+
+      targetPicAdmin = adminUser;
+      updateData.assigned_admin_id = targetAdminId;
+    }
+
+    // 5. Update Status (jika disertakan)
+    if (status !== undefined) {
+      const normalizedStatus = String(status).toUpperCase();
+      if (!['IN_PROGRESS', 'COMPLETED'].includes(normalizedStatus)) {
+        sendError(res, 400, 'Status baru tidak valid (pilih IN_PROGRESS atau COMPLETED)');
+        return;
+      }
+
+      if (normalizedStatus === 'COMPLETED') {
+        const hasUnfinishedTasks = currentProject.tasks.some((t) => !t.is_completed);
+        if (hasUnfinishedTasks) {
+          sendError(
+            res,
+            400,
+            'Semua item checklist penugasan harus dicentang selesai sebelum menandai status perikatan sebagai Completed'
+          );
+          return;
+        }
+      }
+
+      updateData.status = normalizedStatus;
+    }
+
+    // Eksekusi pembaruan ke PostgreSQL
+    const updatedProject = await prisma.consultationProject.update({
+      where: { id: projectId },
+      data: updateData,
+      include: {
+        client: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            company_name: true,
+            phone: true,
+          },
+        },
+        service: true,
+        assigned_admin: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            role: true,
+          },
+        },
+        tasks: { orderBy: { id: 'asc' } },
+        documents: { orderBy: { created_at: 'desc' } },
+      },
+    });
+
+    // Catat ke append-only audit log
+    if (userId) {
+      const auditParts: string[] = [];
+      if (updateData.progress_percent !== undefined) auditParts.push(`progres ${updateData.progress_percent}%`);
+      if (updateData.assigned_admin_id !== undefined && targetPicAdmin) {
+        auditParts.push(`PIC: ${targetPicAdmin.name}`);
+      }
+      if (updateData.description !== undefined) auditParts.push('catatan konsultasi diperbarui');
+      if (updateData.status !== undefined) auditParts.push(`status: ${updateData.status}`);
+
+      const auditSummary = auditParts.length > 0 ? auditParts.join(', ') : 'progres & lembar kerja diperbarui';
+
+      await prisma.auditLog.create({
+        data: {
+          admin_id: userId,
+          client_id: currentProject.client_id,
+          project_id: currentProject.id,
+          action: 'CONSULTATION_UPDATE',
+          status_before: currentProject.status,
+          status_after: (updateData.status as string) || currentProject.status,
+          description: `Admin memperbarui tiket perikatan [${currentProject.project_code}]: ${auditSummary}`,
+        },
+      });
+    }
+
+    // Generate signed download URLs untuk berkas dokumen
+    const docsWithUrls = await Promise.all(
+      updatedProject.documents.map(async (doc) => ({
+        ...doc,
+        download_url: await getSignedDownloadUrl(doc.file_path, 3600),
+      }))
+    );
+
+    sendSuccess(res, 200, 'Data konsultasi (progres, PIC, dan catatan) berhasil diperbarui di server', {
+      ...updatedProject,
+      documents: docsWithUrls,
+    });
+  } catch (error) {
+    sendError(res, 500, 'Gagal memperbarui data konsultasi', (error as Error).message);
+  }
+};
+
 export const addProjectTask = async (req: Request, res: Response): Promise<void> => {
   try {
     const projectId = parseInt(String(req.params.id), 10);
@@ -218,18 +465,17 @@ export const uploadDocument = async (req: Request, res: Response): Promise<void>
     let fileName = body.file_name;
     let filePath = body.file_path;
     let fileSize = body.file_size || '0 KB';
-    let fileType = body.file_type || 'PDF';
+    let fileType = (body.file_type || 'PDF').toUpperCase();
 
     // Jika diunggah langsung melalui form-data/multipart
-    if (req.file) {
-      fileName = req.file.originalname;
-      fileSize = `${(req.file.size / 1024).toFixed(1)} KB`;
-      fileType = req.file.mimetype.includes('pdf')
-        ? 'PDF'
-        : req.file.mimetype.includes('spreadsheet') || req.file.mimetype.includes('excel')
-        ? 'XLSX'
-        : 'DOCX';
-      const uploadResult = await uploadFileToStorage(fileName, req.file.buffer, req.file.mimetype);
+    const file = getUploadedFile(req);
+    if (file) {
+      fileName = body.file_name || file.originalname;
+      fileSize = `${(file.size / 1024).toFixed(1)} KB`;
+      const ext = path.extname(file.originalname).toLowerCase();
+      const detected = ext.includes('xls') ? 'XLSX' : ext.includes('doc') ? 'DOCX' : ext.includes('png') || ext.includes('jp') ? 'IMAGE' : 'PDF';
+      fileType = (body.file_type || detected).toUpperCase();
+      const uploadResult = await uploadFileToStorage(fileName, file.buffer, file.mimetype, 'documents');
       filePath = uploadResult.filePath;
     }
 
@@ -262,7 +508,11 @@ export const uploadDocument = async (req: Request, res: Response): Promise<void>
       });
     }
 
-    sendSuccess(res, 201, 'Dokumen perikatan berhasil diunggah', doc);
+    const downloadUrl = await getSignedDownloadUrl(doc.file_path, 3600);
+    sendSuccess(res, 201, 'Dokumen perikatan berhasil diunggah', {
+      ...doc,
+      download_url: downloadUrl,
+    });
   } catch (error) {
     sendError(res, 500, 'Gagal mengunggah dokumen kerja', (error as Error).message);
   }
@@ -296,8 +546,308 @@ export const getGlobalDocuments = async (_req: Request, res: Response): Promise<
       orderBy: { created_at: 'desc' },
     });
 
-    sendSuccess(res, 200, 'Berhasil memuat repositori dokumen global', documents);
+    // Sertakan signed URL untuk masing-masing dokumen
+    const docsWithUrls = await Promise.all(
+      documents.map(async (doc) => ({
+        ...doc,
+        download_url: await getSignedDownloadUrl(doc.file_path, 3600),
+      }))
+    );
+
+    sendSuccess(res, 200, 'Berhasil memuat repositori dokumen global', docsWithUrls);
   } catch (error) {
     sendError(res, 500, 'Gagal memuat repositori dokumen global', (error as Error).message);
   }
 };
+
+export const deleteDocument = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    const userId = req.user?.id;
+
+    if (isNaN(id)) {
+      sendError(res, 400, 'ID dokumen tidak valid');
+      return;
+    }
+
+    const doc = await prisma.projectDocument.findUnique({
+      where: { id },
+      include: { project: true },
+    });
+
+    if (!doc) {
+      sendError(res, 404, 'Dokumen tidak ditemukan');
+      return;
+    }
+
+    if (doc.file_path) {
+      await deleteFileFromStorage(doc.file_path);
+    }
+
+    await prisma.projectDocument.delete({ where: { id } });
+
+    if (userId) {
+      await prisma.auditLog.create({
+        data: {
+          admin_id: userId,
+          client_id: doc.project?.client_id || null,
+          project_id: doc.project_id,
+          action: 'DOCUMENT_DELETE',
+          file_name: doc.file_name,
+          description: `Admin menghapus dokumen [${doc.file_name}] dari tiket [${doc.project?.project_code || doc.project_id}]`,
+        },
+      });
+    }
+
+    sendSuccess(res, 200, 'Dokumen berhasil dihapus dari repositori server', { id });
+  } catch (error) {
+    sendError(res, 500, 'Gagal menghapus dokumen', (error as Error).message);
+  }
+};
+
+
+export const getClients = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const clients = await prisma.user.findMany({
+      where: { role: 'USER' },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        company_name: true,
+        is_active: true,
+        created_at: true,
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    sendSuccess(res, 200, 'Berhasil memuat daftar klien', clients);
+  } catch (error) {
+    sendError(res, 500, 'Gagal memuat daftar klien', (error as Error).message);
+  }
+};
+
+export const getConsultationById = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userRole = (req.user?.role || '').toUpperCase();
+    const userId = req.user?.id;
+    const projectId = parseInt(String(req.params.id), 10);
+
+    if (isNaN(projectId)) {
+      sendError(res, 400, 'ID perikatan konsultasi tidak valid');
+      return;
+    }
+
+    const project = await prisma.consultationProject.findUnique({
+      where: { id: projectId },
+      include: {
+        client: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            company_name: true,
+            phone: true,
+          },
+        },
+        service: true,
+        tasks: { orderBy: { id: 'asc' } },
+        documents: { orderBy: { created_at: 'desc' } },
+        assigned_admin: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            role: true,
+          },
+        },
+      },
+    });
+
+    if (!project) {
+      sendError(res, 404, 'Perikatan konsultasi tidak ditemukan');
+      return;
+    }
+
+    // Penugasan & Hak Akses PIC (Item #14 Revisi FE):
+    // Admin selain PIC yang ditugaskan tidak dapat melihat/memantau tiket tersebut
+    if (userRole === 'ADMIN' && project.assigned_admin_id !== userId) {
+      sendError(res, 403, 'Akses ditolak: Anda bukan PIC Admin yang ditugaskan untuk tiket perikatan ini');
+      return;
+    }
+
+    const docsWithUrls = await Promise.all(
+      project.documents.map(async (doc) => ({
+        ...doc,
+        download_url: await getSignedDownloadUrl(doc.file_path, 3600),
+      }))
+    );
+
+    sendSuccess(res, 200, 'Berhasil memuat detail konsultasi', {
+      ...project,
+      documents: docsWithUrls,
+    });
+  } catch (error) {
+    sendError(res, 500, 'Gagal memuat detail konsultasi', (error as Error).message);
+  }
+};
+
+export const assignConsultationPic = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userRole = (req.user?.role || '').toUpperCase();
+    const superadminId = req.user?.id;
+    const projectId = parseInt(String(req.params.id), 10);
+    const { admin_id, assigned_admin_id } = req.body || {};
+
+    // Sesuai Catatan Rapat FE (Item #13 & #15):
+    // Superadmin mengassign tiket ke PIC Admin tertentu dan dapat mereassign ke PIC Admin baru
+    if (userRole !== 'SUPERADMIN') {
+      sendError(res, 403, 'Hanya Superadmin yang berwenang menugaskan atau mengubah penugasan PIC tiket konsultasi');
+      return;
+    }
+
+    const targetAdminId = Number(assigned_admin_id || admin_id);
+    if (!targetAdminId || isNaN(targetAdminId)) {
+      sendError(res, 400, 'ID Admin PIC tujuan wajib disertakan');
+      return;
+    }
+
+    const [project, targetAdmin] = await Promise.all([
+      prisma.consultationProject.findUnique({
+        where: { id: projectId },
+        include: { assigned_admin: true },
+      }),
+      prisma.user.findFirst({
+        where: { id: targetAdminId, role: { in: ['ADMIN', 'SUPERADMIN'] }, is_active: true },
+      }),
+    ]);
+
+    if (!project) {
+      sendError(res, 404, 'Tiket perikatan konsultasi tidak ditemukan');
+      return;
+    }
+
+    if (!targetAdmin) {
+      sendError(res, 404, 'Admin staf tidak ditemukan atau akun sedang dinonaktifkan');
+      return;
+    }
+
+    const previousAdminName = project.assigned_admin?.name || 'Belum ditugaskan';
+    const isReassign = Boolean(project.assigned_admin_id);
+
+    const updated = await prisma.consultationProject.update({
+      where: { id: projectId },
+      data: { assigned_admin_id: targetAdminId },
+      include: {
+        assigned_admin: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            role: true,
+          },
+        },
+      },
+    });
+
+    if (superadminId) {
+      await prisma.auditLog.create({
+        data: {
+          admin_id: superadminId,
+          client_id: project.client_id,
+          project_id: project.id,
+          action: isReassign ? 'TICKET_REASSIGNED' : 'TICKET_ASSIGNED',
+          description: `Superadmin ${isReassign ? 'mengalihkan penugasan' : 'menugaskan'} tiket [${project.project_code}] dari [${previousAdminName}] ke PIC baru: [${targetAdmin.name}] (${targetAdmin.email})`,
+        },
+      });
+    }
+
+    sendSuccess(
+      res,
+      200,
+      `Tiket konsultasi berhasil ${isReassign ? 'dialihkan ke PIC baru' : 'ditugaskan ke PIC'}`,
+      updated
+    );
+  } catch (error) {
+    sendError(res, 500, 'Gagal menugaskan PIC tiket konsultasi', (error as Error).message);
+  }
+};
+
+
+export const deleteConsultation = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const projectId = parseInt(String(req.params.id), 10);
+    if (isNaN(projectId)) {
+      sendError(res, 400, 'ID konsultasi tidak valid');
+      return;
+    }
+
+    const project = await prisma.consultationProject.findUnique({
+      where: { id: projectId },
+      include: { documents: true },
+    });
+
+    if (!project) {
+      sendError(res, 404, 'Perikatan konsultasi tidak ditemukan');
+      return;
+    }
+
+    for (const doc of project.documents) {
+      try {
+        await deleteFileFromStorage(doc.file_path);
+      } catch {}
+    }
+
+    await prisma.auditLog.deleteMany({ where: { project_id: projectId } });
+    await prisma.consultationProject.delete({ where: { id: projectId } });
+
+    sendSuccess(res, 200, 'Konsultasi berhasil dihapus secara permanen dari database');
+  } catch (error) {
+    sendError(res, 500, 'Gagal menghapus konsultasi', (error as Error).message);
+  }
+};
+
+export const archiveConsultation = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const projectId = parseInt(String(req.params.id), 10);
+    const { is_archived } = req.body || {};
+    if (isNaN(projectId)) {
+      sendError(res, 400, 'ID konsultasi tidak valid');
+      return;
+    }
+
+    const updated = await prisma.consultationProject.update({
+      where: { id: projectId },
+      data: { is_archived: is_archived !== undefined ? Boolean(is_archived) : true },
+    });
+
+    sendSuccess(res, 200, `Konsultasi berhasil ${updated.is_archived ? 'diarsipkan' : 'dipulihkan'}`, updated);
+  } catch (error) {
+    sendError(res, 500, 'Gagal mengubah status arsip konsultasi', (error as Error).message);
+  }
+};
+
+export const updateConsultationPriority = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const projectId = parseInt(String(req.params.id), 10);
+    const { priority } = req.body || {};
+    if (isNaN(projectId)) {
+      sendError(res, 400, 'ID konsultasi tidak valid');
+      return;
+    }
+
+    const updated = await prisma.consultationProject.update({
+      where: { id: projectId },
+      data: { priority: priority || 'Normal' },
+    });
+
+    sendSuccess(res, 200, 'Prioritas konsultasi berhasil diperbarui', updated);
+  } catch (error) {
+    sendError(res, 500, 'Gagal mengubah prioritas konsultasi', (error as Error).message);
+  }
+};
+
+

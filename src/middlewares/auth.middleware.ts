@@ -3,6 +3,8 @@ import jwt from 'jsonwebtoken';
 import { redis } from '../config/redis.js';
 import { sendError } from '../utils/response.js';
 
+import { JWT_SECRET } from '../config/jwt.js';
+
 export interface AuthUser {
   id: number;
   email: string;
@@ -27,24 +29,27 @@ export const requireAuth = async (req: Request, res: Response, next: NextFunctio
     }
 
     const token = authHeader.split(' ')[1];
-    const secret = process.env.JWT_SECRET || 'zhou_consulting_jwt_secret_dev_key_2026';
+    const decoded = jwt.verify(token, JWT_SECRET) as AuthUser;
 
-    const decoded = jwt.verify(token, secret) as AuthUser;
+    // Check token blacklist in Redis (JTI revocation & User Deactivation) jika Redis aktif
+    try {
+      if (decoded.jti) {
+        const isBlacklisted = await redis.get(`blacklist:${decoded.jti}`);
+        if (isBlacklisted) {
+          sendError(res, 401, 'Sesi telah berakhir atau hak akses telah dicabut. Silakan login kembali.');
+          return;
+        }
+      }
 
-    // Check token blacklist in Redis (JTI revocation & User Deactivation)
-    if (decoded.jti) {
-      const isBlacklisted = await redis.get(`blacklist:${decoded.jti}`);
-      if (isBlacklisted) {
-        sendError(res, 401, 'Sesi telah berakhir atau hak akses telah dicabut. Silakan login kembali.');
+      // Check jika akun telah dinonaktifkan secara instan oleh Superadmin
+      const isUserRevoked = await redis.get(`user_revoked:${decoded.id}`);
+      if (isUserRevoked) {
+        sendError(res, 403, 'Akses akun Anda telah dinonaktifkan. Silakan hubungi administrator.');
         return;
       }
-    }
-
-    // Check jika akun telah dinonaktifkan secara instan oleh Superadmin
-    const isUserRevoked = await redis.get(`user_revoked:${decoded.id}`);
-    if (isUserRevoked) {
-      sendError(res, 403, 'Akses akun Anda telah dinonaktifkan. Silakan hubungi administrator.');
-      return;
+    } catch (redisErr) {
+      // Redis offline/unreachable: jangan blokir autentikasi valid
+      console.warn('⚠️ Redis unreachable in requireAuth, bypassing blacklist check:', (redisErr as Error).message);
     }
 
     req.user = decoded;
@@ -61,11 +66,14 @@ export const requireRole = (...allowedRoles: string[]) => {
       return;
     }
 
-    if (!allowedRoles.includes(req.user.role)) {
-      sendError(res, 403, 'Akses dilarang: Peran Anda tidak memiliki hak akses untuk endpoint ini');
-      return;
+    const userRole = (req.user.role || '').toUpperCase();
+    const upperAllowed = allowedRoles.map((r) => r.toUpperCase());
+
+    // Superadmin sekarang bisa akses ke semua fitur
+    if (userRole === 'SUPERADMIN' || upperAllowed.includes(userRole)) {
+      return next();
     }
 
-    next();
+    sendError(res, 403, 'Akses dilarang: Peran Anda tidak memiliki hak akses untuk endpoint ini');
   };
 };
