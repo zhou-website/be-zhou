@@ -11,16 +11,16 @@
   },
   "servers": [
     {
-      "url": "http://139.190.103.80",
-      "description": "VPS Biznet Gio (Live Server)"
-    },
-    {
-      "url": "https://api.zhouconsulting.id",
+      "url": "http://api.zhouconsulting.id",
       "description": "Production Domain (api.zhouconsulting.id)"
     },
     {
-      "url": "https://api.zhouconsulting.com",
-      "description": "Alternative Domain (api.zhouconsulting.com)"
+      "url": "https://api.zhouconsulting.id",
+      "description": "Production Domain HTTPS"
+    },
+    {
+      "url": "http://139.190.103.80",
+      "description": "VPS Biznet Gio Direct IP (Auto Redirect)"
     },
     {
       "url": "http://localhost:5000",
