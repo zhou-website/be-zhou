@@ -76,6 +76,8 @@ const allowedOrigins = [
   'https://dev.zhouconsulting.com',
   'https://zhouconsulting.id',
   'http://zhouconsulting.id',
+  'https://www.zhouconsulting.id',
+  'http://www.zhouconsulting.id',
   'https://dev.zhouconsulting.id',
   'http://dev.zhouconsulting.id',
   'https://api.zhouconsulting.id',

@@ -12,7 +12,7 @@
   "servers": [
     {
       "url": "http://139.190.103.80",
-      "description": "VPS Biznet Gio Direct IP (Live Testing Server)"
+      "description": "VPS Biznet Gio Live Server (Active & Ready)"
     },
     {
       "url": "http://api.zhouconsulting.id",
