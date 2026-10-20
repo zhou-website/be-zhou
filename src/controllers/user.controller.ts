@@ -14,39 +14,23 @@ export const getProfile = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    let user: any = null;
-    try {
-      user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          role: true,
-          phone: true,
-          company_name: true,
-          avatar_url: true,
-          created_at: true,
-        },
-      });
-    } catch (dbErr) {
-      console.warn('⚠️ Database query failed in getProfile, activating fallback profile:', (dbErr as Error).message);
-    }
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        phone: true,
+        company_name: true,
+        avatar_url: true,
+        created_at: true,
+      },
+    });
 
-    // Jika user tidak ditemukan di database atau database offline, gunakan data sesi token
     if (!user) {
-      const email = req.user?.email || 'user@zhouconsulting.com';
-      const role = req.user?.role || 'USER';
-      user = {
-        id: userId,
-        name: email.split('@')[0],
-        email: email,
-        role: role,
-        phone: '+6281234567890',
-        company_name: role === 'USER' ? 'PT Mitra Klien Zhou' : 'Zhou Consulting Group',
-        avatar_url: null,
-        created_at: new Date().toISOString(),
-      };
+      sendError(res, 404, 'Data profil pengguna tidak ditemukan dalam database');
+      return;
     }
 
     sendSuccess(res, 200, 'Berhasil mengambil data profil', user);

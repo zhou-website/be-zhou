@@ -50,15 +50,7 @@ export const getDashboardOverview = async (req: Request, res: Response): Promise
       recent_documents: recentDocuments,
     });
   } catch (error) {
-    console.warn('⚠️ Database query failed in getDashboardOverview, fallback mode:', (error as Error).message);
-    sendSuccess(res, 200, 'Berhasil memuat ringkasan dashboard klien (mode siaga)', {
-      stats: {
-        active_consultations: 1,
-        completed_consultations: 0,
-        total_documents: 0,
-      },
-      recent_documents: [],
-    });
+    sendError(res, 500, 'Gagal memuat ringkasan dashboard klien', (error as Error).message);
   }
 };
 
@@ -131,41 +123,7 @@ export const getConsultations = async (req: Request, res: Response): Promise<voi
 
     sendSuccess(res, 200, 'Berhasil memuat daftar perikatan konsultasi', safeProjects);
   } catch (error) {
-    console.warn('⚠️ Database query failed in getConsultations, fallback mode:', (error as Error).message);
-    sendSuccess(res, 200, 'Berhasil memuat daftar perikatan konsultasi (mode siaga)', [
-      {
-        id: 1,
-        project_code: 'ZHOU-TAX-2026-088',
-        title: 'Konsultasi Kepatuhan Perpajakan & Kesiapan Coretax',
-        status: 'IN_PROGRESS',
-        progress_percent: 60,
-        client: {
-          id: req.user?.id || 1,
-          name: 'Klien Zhou Consulting',
-          email: req.user?.email || 'klien@zhouconsulting.com',
-          company_name: 'PT Sinergi Mandiri',
-          phone: '+6281234567890',
-        },
-        service: {
-          service_code: 'TAX_CORE',
-          service_name: 'Tax Service Core & Kesiapan Coretax',
-          category: 'TAX',
-        },
-        assigned_admin: {
-          id: 2,
-          name: 'Konsultan Senior Zhou',
-          email: 'admin@zhouconsulting.com',
-          phone: '+6281234567891',
-        },
-        tasks: [
-          { id: 1, task_name: 'Pengumpulan Rekapitulasi Faktur Pajak Masukan/Keluaran', is_completed: true },
-          { id: 2, task_name: 'Rekonsiliasi Fiskal & Ekualisasi SPT Masa PPN vs PPh', is_completed: true },
-          { id: 3, task_name: 'Penyusunan Lampiran Khusus & Laporan Keuangan Fiskal', is_completed: false },
-        ],
-        documents: [],
-        created_at: new Date().toISOString(),
-      },
-    ]);
+    sendError(res, 500, 'Gagal memuat daftar perikatan konsultasi', (error as Error).message);
   }
 };
 
@@ -316,30 +274,7 @@ export const getChatbotTree = async (_req: Request, res: Response): Promise<void
 
     sendSuccess(res, 200, 'Pohon keputusan chatbot berhasil dimuat', faqs);
   } catch (error) {
-    console.warn('⚠️ Database query failed in getChatbotTree, fallback mode:', (error as Error).message);
-    sendSuccess(res, 200, 'Pohon keputusan chatbot berhasil dimuat (mode siaga)', [
-      {
-        id: 1,
-        category: 'LAYANAN',
-        question: 'Layanan apa saja yang disediakan Zhou Consulting?',
-        answer_template:
-          'Kami menyediakan Tax Service Core & Kesiapan Coretax, Accounting Service, Business Financial Consulting, dan Legal & Tax Dispute Advisory.',
-      },
-      {
-        id: 2,
-        category: 'KONSULTASI',
-        question: 'Bagaimana cara memulai konsultasi perpajakan?',
-        answer_template:
-          'Anda dapat mendaftarkan akun korporasi di website ini, membuka tiket konsultasi, atau langsung mengklik tombol konsultasi WhatsApp.',
-      },
-      {
-        id: 3,
-        category: 'SP2DK',
-        question: 'Perusahaan saya menerima surat SP2DK dari KPP, apa yang harus dilakukan?',
-        answer_template:
-          'Segera hubungi tim konsultan Zhou Consulting dan unggah dokumen SP2DK Anda. Kami akan meninjau data fiskal Anda dan menyusun tanggapan resmi.',
-      },
-    ]);
+    sendError(res, 500, 'Gagal memuat pohon keputusan chatbot', (error as Error).message);
   }
 };
 

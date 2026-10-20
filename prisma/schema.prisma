@@ -69,6 +69,8 @@ model ConsultationProject {
   description       String?  @db.Text
   status            String   @default("IN_PROGRESS") @db.VarChar(50) // IN_PROGRESS, COMPLETED
   progress_percent  Int      @default(0)
+  is_archived       Boolean  @default(false)
+  priority          String   @default("Normal") @db.VarChar(50)
   created_at        DateTime @default(now()) @db.Timestamp(6)
   updated_at        DateTime @updatedAt @db.Timestamp(6)
 
@@ -159,6 +161,8 @@ model Regulation {
   regulation_type String   @db.VarChar(100)
   file_path       String   @db.VarChar(500)
   file_size       String   @db.VarChar(50)
+  legal_status    String?  @default("Berlaku") @db.VarChar(50)
+  replacement_ref String?  @db.VarChar(255)
   uploaded_by     Int?
   created_at      DateTime @default(now()) @db.Timestamp(6)
 

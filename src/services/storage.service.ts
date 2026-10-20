@@ -9,7 +9,7 @@ export const getPublicStorageUrl = (filePath: string): string => {
     const { data } = supabase.storage.from(BUCKET_NAME).getPublicUrl(filePath);
     return data?.publicUrl || '';
   } catch {
-    return `https://storage.zhouconsulting.com/fallback/${filePath}`;
+    return '';
   }
 };
 
@@ -32,11 +32,6 @@ export const getSignedDownloadUrl = async (
     }
   }
 
-  // Jika URL Supabase masih placeholder di environment lokal dev, kembalikan mock secured URL
-  if (!process.env.SUPABASE_URL || process.env.SUPABASE_URL.includes('xyzcompany')) {
-    return `https://mock-storage.zhouconsulting.com/signed-download/${cleanPath}?token=sec_${Date.now()}&expires=${expiresInSeconds}`;
-  }
-
   try {
     const { data, error } = await supabase.storage
       .from(BUCKET_NAME)
@@ -48,9 +43,9 @@ export const getSignedDownloadUrl = async (
 
     return data.signedUrl;
   } catch (error) {
-    console.warn('⚠️ Supabase signed URL fallback:', (error as Error).message);
+    console.warn('⚠️ Supabase signed URL error, using public URL fallback:', (error as Error).message);
     const { data: pubData } = supabase.storage.from(BUCKET_NAME).getPublicUrl(cleanPath);
-    return pubData?.publicUrl || `https://storage.zhouconsulting.com/fallback/${cleanPath}`;
+    return pubData?.publicUrl || '';
   }
 };
 
@@ -64,11 +59,7 @@ export const uploadFileToStorage = async (
   const sanitizedPath = `${folder}/${Date.now()}_${safeName}`;
 
   if (!process.env.SUPABASE_URL || process.env.SUPABASE_URL.includes('xyzcompany')) {
-    return {
-      filePath: sanitizedPath,
-      publicUrl: `https://mock-storage.zhouconsulting.com/${sanitizedPath}`,
-      signedUrl: `https://mock-storage.zhouconsulting.com/signed-download/${sanitizedPath}?token=sec_${Date.now()}`,
-    };
+    throw new Error('Konfigurasi SUPABASE_URL belum diatur dengan benar di server.');
   }
 
   const { data, error } = await supabase.storage
@@ -102,5 +93,24 @@ export const uploadFileToStorage = async (
     publicUrl: publicData?.publicUrl,
     signedUrl: signedUrl || publicData?.publicUrl,
   };
+};
+
+export const deleteFileFromStorage = async (filePath: string): Promise<boolean> => {
+  if (!filePath) return false;
+  try {
+    let cleanPath = filePath;
+    if (cleanPath.startsWith('http://') || cleanPath.startsWith('https://')) {
+      const bucketPrefix = `/${BUCKET_NAME}/`;
+      const idx = cleanPath.indexOf(bucketPrefix);
+      if (idx !== -1) {
+        cleanPath = cleanPath.substring(idx + bucketPrefix.length).split('?')[0];
+      }
+    }
+    await supabase.storage.from(BUCKET_NAME).remove([cleanPath]);
+    return true;
+  } catch (error) {
+    console.warn('⚠️ Supabase storage file removal skipped/failed:', (error as Error).message);
+    return false;
+  }
 };
 
