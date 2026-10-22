@@ -503,7 +503,6 @@ export const getEducation = async (req: Request, res: Response): Promise<void> =
         const finalImage = item.image_url || getEducationDefaultCover(item.category, item.id);
         return {
           ...item,
-          image: finalImage,
           image_url: finalImage,
           cover_image: finalImage,
           download_url: download_url || file_url,
@@ -551,7 +550,6 @@ export const getEducationById = async (req: Request, res: Response): Promise<voi
 
     sendSuccess(res, 200, 'Berhasil memuat detail materi edukasi', {
       ...item,
-      image: finalImage,
       image_url: finalImage,
       cover_image: finalImage,
       download_url: download_url || file_url,
@@ -627,8 +625,6 @@ export const createEducation = async (req: Request, res: Response): Promise<void
       const uploadRes = await uploadBase64ToStorage(image_url, 'education', 'edu_cover');
       if (uploadRes) {
         image_url = uploadRes.publicUrl || uploadRes.signedUrl || uploadRes.filePath;
-      } else {
-        image_url = getEducationDefaultCover(category, Date.now());
       }
     }
 
@@ -671,7 +667,6 @@ export const createEducation = async (req: Request, res: Response): Promise<void
 
     sendSuccess(res, 201, 'Konten edukasi berhasil dipublikasikan ke Supabase', {
       ...item,
-      image: finalImage,
       image_url: finalImage,
       cover_image: finalImage,
       download_url: download_url || file_url,
@@ -1385,8 +1380,6 @@ export const updateEducation = async (req: Request, res: Response): Promise<void
       const uploadRes = await uploadBase64ToStorage(image_url, 'education', 'edu_cover');
       if (uploadRes) {
         image_url = uploadRes.publicUrl || uploadRes.signedUrl || uploadRes.filePath;
-      } else {
-        image_url = getEducationDefaultCover(category, id || Date.now());
       }
     }
 
@@ -1424,7 +1417,6 @@ export const updateEducation = async (req: Request, res: Response): Promise<void
 
     sendSuccess(res, 200, 'Materi edukasi berhasil diperbarui', {
       ...updated,
-      image: finalImage,
       image_url: finalImage,
       cover_image: finalImage,
       download_url: download_url || file_url,
