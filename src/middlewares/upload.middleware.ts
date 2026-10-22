@@ -112,3 +112,15 @@ export const getUploadedFile = (req: Request): Express.Multer.File | undefined =
   return undefined;
 };
 
+
+// Helper universal untuk mengekstrak seluruh file yang diunggah dari request
+export const getUploadedFiles = (req: Request): Express.Multer.File[] => {
+  if (req.file) return [req.file];
+  const files = req.files;
+  if (!files) return [];
+  if (Array.isArray(files)) return files;
+  if (typeof files === 'object') {
+    return Object.values(files as Record<string, Express.Multer.File[]>).flat();
+  }
+  return [];
+};

@@ -92,15 +92,27 @@ export const getConsultations = async (req: Request, res: Response): Promise<voi
       orderBy: { created_at: 'desc' },
     });
 
-    const safeProjects = projects.map((p) => ({
-      ...p,
-      client: p.client
-        ? {
-            ...p.client,
-            company_name: p.client.company_name || p.client.name || 'Perusahaan Klien',
-          }
-        : undefined,
-    }));
+    const safeProjects = await Promise.all(
+      projects.map(async (p) => {
+        const docsWithUrls = await Promise.all(
+          p.documents.map(async (doc) => ({
+            ...doc,
+            download_url: await getSignedDownloadUrl(doc.file_path, 3600),
+          }))
+        );
+        return {
+          ...p,
+          client: p.client
+            ? {
+                ...p.client,
+                company_name: p.client.company_name || p.client.name || 'Perusahaan Klien',
+              }
+            : undefined,
+          documents: docsWithUrls,
+        };
+      })
+    );
+
 
     sendSuccess(res, 200, 'Berhasil mengambil daftar konsultasi', safeProjects);
   } catch (error) {
@@ -452,20 +464,130 @@ export const addProjectTask = async (req: Request, res: Response): Promise<void>
 export const toggleProjectTask = async (req: Request, res: Response): Promise<void> => {
   try {
     const taskId = parseInt(String(req.params.taskId), 10);
-    const { is_completed } = req.body || {};
+    const body = req.body || {};
+    const isCompleted = body.is_completed !== undefined ? Boolean(body.is_completed) : Boolean(body.completed);
 
     const task = await prisma.projectTask.update({
       where: { id: taskId },
       data: {
-        is_completed: Boolean(is_completed),
+        is_completed: isCompleted,
       },
     });
+
+    // Otomatis sinkronkan progress_percent tiket perikatan berdasarkan persentase checklist yang selesai
+    if (task.project_id) {
+      const allTasks = await prisma.projectTask.findMany({
+        where: { project_id: task.project_id },
+      });
+      if (allTasks.length > 0) {
+        const completedCount = allTasks.filter((t) => t.is_completed).length;
+        const progressPercent = Math.round((completedCount / allTasks.length) * 100);
+        await prisma.consultationProject.update({
+          where: { id: task.project_id },
+          data: {
+            progress_percent: progressPercent,
+            ...(progressPercent === 100 ? { status: 'COMPLETED' } : {}),
+          },
+        });
+      }
+    }
 
     sendSuccess(res, 200, 'Status checklist berhasil diperbarui', task);
   } catch (error) {
     sendError(res, 500, 'Gagal memperbarui checklist tugas', (error as Error).message);
   }
 };
+
+export const updateProjectTasksBatch = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const projectId = parseInt(String(req.params.id), 10);
+    const { tasks, milestones, progress_percent } = req.body || {};
+
+    if (isNaN(projectId)) {
+      sendError(res, 400, 'ID perikatan konsultasi tidak valid');
+      return;
+    }
+
+    const project = await prisma.consultationProject.findUnique({
+      where: { id: projectId },
+      include: { tasks: true },
+    });
+
+    if (!project) {
+      sendError(res, 404, 'Perikatan konsultasi tidak ditemukan');
+      return;
+    }
+
+    if (Array.isArray(tasks) && tasks.length > 0) {
+      for (const t of tasks) {
+        if (t.id) {
+          const numId = parseInt(String(t.id), 10);
+          if (!isNaN(numId)) {
+            await prisma.projectTask.update({
+              where: { id: numId },
+              data: {
+                ...(t.is_completed !== undefined ? { is_completed: Boolean(t.is_completed) } : {}),
+                ...(t.task_name ? { task_name: String(t.task_name) } : {}),
+              },
+            });
+          }
+        } else if (t.task_name) {
+          await prisma.projectTask.create({
+            data: {
+              project_id: projectId,
+              task_name: String(t.task_name),
+              is_completed: Boolean(t.is_completed),
+            },
+          });
+        }
+      }
+    }
+
+    const allTasks = await prisma.projectTask.findMany({
+      where: { project_id: projectId },
+      orderBy: { id: 'asc' },
+    });
+
+    let calculatedProgress = project.progress_percent;
+    if (progress_percent !== undefined && !isNaN(Number(progress_percent))) {
+      calculatedProgress = Number(progress_percent);
+    } else if (allTasks.length > 0) {
+      const completedCount = allTasks.filter((t) => t.is_completed).length;
+      calculatedProgress = Math.round((completedCount / allTasks.length) * 100);
+    }
+
+    const updateData: Record<string, unknown> = {
+      progress_percent: calculatedProgress,
+      ...(calculatedProgress === 100 ? { status: 'COMPLETED' } : {}),
+    };
+
+    if (milestones && Array.isArray(milestones)) {
+      updateData.milestones = milestones;
+    }
+
+    const updated = await prisma.consultationProject.update({
+      where: { id: projectId },
+      data: updateData,
+      include: {
+        tasks: { orderBy: { id: 'asc' } },
+        assigned_admin: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            role: true,
+          },
+        },
+      },
+    });
+
+    sendSuccess(res, 200, 'Seluruh tahapan checklist pengerjaan berhasil diperbarui', updated);
+  } catch (error) {
+    sendError(res, 500, 'Gagal memperbarui checklist tahapan pengerjaan', (error as Error).message);
+  }
+};
+
 
 export const uploadDocument = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -748,9 +870,51 @@ export const assignConsultationPic = async (req: Request, res: Response): Promis
     const previousAdminName = project.assigned_admin?.name || 'Belum ditugaskan';
     const isReassign = Boolean(project.assigned_admin_id);
 
+    // 1. Tandai checklist task ke-2 ("Penetapan Konsultan PIC & Divisi Terkait") sebagai is_completed: true (BE-01)
+    const existingTasks = await prisma.projectTask.findMany({
+      where: { project_id: projectId },
+      orderBy: { id: 'asc' },
+    });
+
+    if (existingTasks.length === 0) {
+      await prisma.projectTask.createMany({
+        data: [
+          { project_id: projectId, task_name: 'Intake & Verifikasi Berkas Awal', is_completed: true },
+          { project_id: projectId, task_name: 'Penetapan Konsultan PIC & Divisi Terkait', is_completed: true },
+          { project_id: projectId, task_name: 'Analisis & Pengerjaan Lembar Kerja Fiskal', is_completed: false },
+          { project_id: projectId, task_name: 'Finalisasi & Penyampaian Hasil Konsultasi', is_completed: false },
+        ],
+      });
+    } else {
+      const picTask = existingTasks.find(
+        (t) =>
+          t.task_name.toLowerCase().includes('penetapan konsultan') ||
+          t.task_name.toLowerCase().includes('konsultan pic') ||
+          t.task_name.toLowerCase().includes('pic')
+      );
+      if (picTask) {
+        await prisma.projectTask.update({
+          where: { id: picTask.id },
+          data: { is_completed: true },
+        });
+      } else if (existingTasks.length >= 2) {
+        // Fallback jika nama berbeda: tandai task ke-2 sebagai selesai
+        await prisma.projectTask.update({
+          where: { id: existingTasks[1].id },
+          data: { is_completed: true },
+        });
+      }
+    }
+
+    // 2. Naikkan progress_percent tiket menjadi minimal 40% (PRD & Laporan PM BE-01)
+    const newProgress = Math.max(project.progress_percent || 0, 40);
+
     const updated = await prisma.consultationProject.update({
       where: { id: projectId },
-      data: { assigned_admin_id: targetAdminId },
+      data: {
+        assigned_admin_id: targetAdminId,
+        progress_percent: newProgress,
+      },
       include: {
         assigned_admin: {
           select: {
@@ -760,6 +924,9 @@ export const assignConsultationPic = async (req: Request, res: Response): Promis
             phone: true,
             role: true,
           },
+        },
+        tasks: {
+          orderBy: { id: 'asc' },
         },
       },
     });
@@ -771,7 +938,7 @@ export const assignConsultationPic = async (req: Request, res: Response): Promis
           client_id: project.client_id,
           project_id: project.id,
           action: isReassign ? 'TICKET_REASSIGNED' : 'TICKET_ASSIGNED',
-          description: `Superadmin ${isReassign ? 'mengalihkan penugasan' : 'menugaskan'} tiket [${project.project_code}] dari [${previousAdminName}] ke PIC baru: [${targetAdmin.name}] (${targetAdmin.email})`,
+          description: `Superadmin ${isReassign ? 'mengalihkan penugasan' : 'menugaskan'} tiket [${project.project_code}] dari [${previousAdminName}] ke PIC baru: [${targetAdmin.name}] (${targetAdmin.email}) - Progres disesuaikan ke ${newProgress}%`,
         },
       });
     }

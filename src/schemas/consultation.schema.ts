@@ -27,5 +27,41 @@ export const addTaskSchema = z
   }));
 
 export const toggleTaskSchema = z.object({
-  is_completed: z.boolean().optional(),
+  is_completed: z
+    .union([z.boolean(), z.string()])
+    .optional()
+    .transform((val) => {
+      if (val === undefined) return undefined;
+      if (typeof val === 'string') return val === 'true' || val === '1';
+      return Boolean(val);
+    }),
+  completed: z
+    .union([z.boolean(), z.string()])
+    .optional()
+    .transform((val) => {
+      if (val === undefined) return undefined;
+      if (typeof val === 'string') return val === 'true' || val === '1';
+      return Boolean(val);
+    }),
+});
+
+export const updateTasksBatchSchema = z.object({
+  tasks: z
+    .array(
+      z.object({
+        id: z.union([z.number(), z.string()]).optional(),
+        task_name: z.string().optional(),
+        is_completed: z
+          .union([z.boolean(), z.string()])
+          .optional()
+          .transform((val) => {
+            if (val === undefined) return undefined;
+            if (typeof val === 'string') return val === 'true' || val === '1';
+            return Boolean(val);
+          }),
+      })
+    )
+    .optional(),
+  milestones: z.array(z.any()).optional(),
+  progress_percent: z.number().min(0).max(100).optional(),
 });

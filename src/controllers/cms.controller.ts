@@ -5,7 +5,29 @@ import { redis } from '../config/redis.js';
 import { sendSuccess, sendError } from '../utils/response.js';
 import { sendApplicationConfirmationEmail } from '../services/email.service.js';
 import { uploadFileToStorage, getSignedDownloadUrl, getPublicStorageUrl, deleteFileFromStorage } from '../services/storage.service.js';
-import { getUploadedFile } from '../middlewares/upload.middleware.js';
+import { getUploadedFile, getUploadedFiles } from '../middlewares/upload.middleware.js';
+
+// Helper upload base64 dataUrl ke Supabase Storage (BE-03)
+const uploadBase64ToStorage = async (
+  dataUrl: string,
+  folder: string,
+  prefix: string = 'file'
+): Promise<{ filePath: string; publicUrl?: string; signedUrl?: string } | null> => {
+  try {
+    const matches = dataUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) return null;
+    const mimeType = matches[1];
+    const buffer = Buffer.from(matches[2], 'base64');
+    let ext = mimeType.split('/')[1]?.replace('jpeg', 'jpg') || 'bin';
+    if (mimeType === 'application/pdf') ext = 'pdf';
+    const fileName = `${prefix}_${Date.now()}.${ext}`;
+    return await uploadFileToStorage(fileName, buffer, mimeType, folder);
+  } catch (err) {
+    console.warn(`⚠️ Gagal unggah base64 ke storage folder ${folder}:`, (err as Error).message);
+    return null;
+  }
+};
+
 
 // --- CMS: Company Profiles & Visi Misi ---
 export const getCompanyProfiles = async (_req: Request, res: Response): Promise<void> => {
@@ -160,12 +182,27 @@ export const getServices = async (_req: Request, res: Response): Promise<void> =
 export const createService = async (req: Request, res: Response): Promise<void> => {
   try {
     const { service_code, service_name, category, description, card_explanation, features } = req.body || {};
+    if (!service_name) {
+      sendError(res, 400, 'Nama layanan wajib diisi');
+      return;
+    }
+
+    // Auto-generate service_code jika tidak diisi oleh Superadmin (PM Item #5)
+    let finalCode = (service_code || '').trim();
+    if (!finalCode) {
+      const baseSlug = String(service_name)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'service';
+      finalCode = `srv-${baseSlug}-${Date.now().toString().slice(-4)}`;
+    }
+
     const newService = await prisma.service.create({
       data: {
-        service_code,
+        service_code: finalCode,
         service_name,
-        category,
-        description,
+        category: category || 'Layanan Umum',
+        description: description || null,
         card_explanation: card_explanation || null,
         features: features ? (typeof features === 'string' ? features : JSON.stringify(features)) : null,
       },
@@ -187,7 +224,7 @@ export const getTaxRates = async (_req: Request, res: Response): Promise<void> =
 
     const rates = await prisma.taxRate.findMany({
       orderBy: { created_at: 'desc' },
-      take: 20,
+      take: 50,
     });
 
     await redis.set('cache:tax_rates', JSON.stringify(rates), 'EX', 1800); // 30 menit
@@ -199,14 +236,22 @@ export const getTaxRates = async (_req: Request, res: Response): Promise<void> =
 
 export const createTaxRate = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { currency_code, rate_value, effective_start_date, effective_end_date } = req.body || {};
+    const { currency_code, rate_value, effective_start_date, effective_end_date, kmk_number, change, trend } = req.body || {};
+
+    if (!currency_code || rate_value === undefined || !effective_start_date) {
+      sendError(res, 400, 'Kode valas, nilai kurs, dan tanggal efektif wajib diisi');
+      return;
+    }
 
     const rate = await prisma.taxRate.create({
       data: {
-        currency_code,
-        rate_value,
+        currency_code: String(currency_code).toUpperCase(),
+        rate_value: Number(rate_value),
         effective_start_date: new Date(effective_start_date),
         effective_end_date: effective_end_date ? new Date(effective_end_date) : null,
+        kmk_number: kmk_number || null,
+        change: change || null,
+        trend: trend || null,
       },
     });
 
@@ -216,6 +261,50 @@ export const createTaxRate = async (req: Request, res: Response): Promise<void> 
     sendError(res, 500, 'Gagal menambahkan kurs pajak', (error as Error).message);
   }
 };
+
+export const createTaxRatesBatch = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { kmk_number, effective_start_date, effective_end_date, rates } = req.body || {};
+
+    if (!Array.isArray(rates) || rates.length === 0) {
+      sendError(res, 400, 'Daftar kurs pajak (rates) harus berupa array dan tidak boleh kosong');
+      return;
+    }
+
+    const startDate = effective_start_date ? new Date(effective_start_date) : new Date();
+    const endDate = effective_end_date ? new Date(effective_end_date) : null;
+    const kmk = kmk_number ? String(kmk_number).trim() : null;
+
+    const createdItems = [];
+    for (const item of rates) {
+      const code = item.currency_code || item.code || item.currency;
+      const val = item.rate_value !== undefined ? item.rate_value : (item.rate || item.value);
+      if (!code || val === undefined) continue;
+
+      const rateNum = Number(String(val).replace(/,/g, ''));
+      if (isNaN(rateNum)) continue;
+
+      const created = await prisma.taxRate.create({
+        data: {
+          currency_code: String(code).toUpperCase(),
+          rate_value: rateNum,
+          effective_start_date: item.effective_start_date ? new Date(item.effective_start_date) : startDate,
+          effective_end_date: item.effective_end_date ? new Date(item.effective_end_date) : endDate,
+          kmk_number: item.kmk_number || kmk,
+          change: item.change || null,
+          trend: item.trend || null,
+        },
+      });
+      createdItems.push(created);
+    }
+
+    await redis.del('cache:tax_rates');
+    sendSuccess(res, 201, `Berhasil menyimpan ${createdItems.length} data kurs valas KMK mingguan`, createdItems);
+  } catch (error) {
+    sendError(res, 500, 'Gagal menyimpan kurs pajak batch', (error as Error).message);
+  }
+};
+
 
 // --- CMS: Regulations ---
 export const getRegulations = async (req: Request, res: Response): Promise<void> => {
@@ -319,7 +408,7 @@ export const downloadRegulationFile = async (req: Request, res: Response): Promi
 export const createRegulation = async (req: Request, res: Response): Promise<void> => {
   try {
     const body = req.body || {};
-    let { title, regulation_type, file_path, file_size, legal_status, replacement_ref } = body;
+    let { title, regulation_type, file_path, file_size, legal_status, replacement_ref, doc_number, year } = body;
     const adminId = req.user?.id;
     const file = getUploadedFile(req);
 
@@ -327,6 +416,16 @@ export const createRegulation = async (req: Request, res: Response): Promise<voi
       file_size = `${(file.size / 1024).toFixed(1)} KB`;
       const uploadResult = await uploadFileToStorage(file.originalname, file.buffer, file.mimetype, 'regulations');
       file_path = uploadResult.filePath;
+    } else if (file_path && String(file_path).startsWith('data:')) {
+      const uploadRes = await uploadBase64ToStorage(file_path, 'regulations', 'reg');
+      if (uploadRes) {
+        file_path = uploadRes.filePath;
+      }
+    } else if (body.file_data && String(body.file_data).startsWith('data:')) {
+      const uploadRes = await uploadBase64ToStorage(body.file_data, 'regulations', 'reg');
+      if (uploadRes) {
+        file_path = uploadRes.filePath;
+      }
     } else if (!file_path && (body.file_url || body.filePath)) {
       file_path = body.file_url || body.filePath;
     }
@@ -340,6 +439,8 @@ export const createRegulation = async (req: Request, res: Response): Promise<voi
       data: {
         title,
         regulation_type,
+        doc_number: doc_number || body.nomor || null,
+        year: year ? Number(year) : (body.tahun ? Number(body.tahun) : null),
         file_path,
         file_size: file_size || '0 KB',
         legal_status: legal_status || 'Berlaku',
@@ -360,6 +461,7 @@ export const createRegulation = async (req: Request, res: Response): Promise<voi
     sendError(res, 500, 'Gagal membuat regulasi', (error as Error).message);
   }
 };
+
 
 // Helper default cover image untuk konten edukasi (Item Penambahan Foto BE)
 const getEducationDefaultCover = (category?: string, id: number = 1): string => {
@@ -496,24 +598,42 @@ export const createEducation = async (req: Request, res: Response): Promise<void
     if (!category) {
       category = body.cat || 'Literasi Perpajakan';
     }
-    if (!image_url && (body.photo_url || body.imageUrl || body.cover_image)) {
-      image_url = body.photo_url || body.imageUrl || body.cover_image;
+    // Periksa seluruh alias properti foto sampul termasuk body.image dari Frontend (BE-03)
+    if (!image_url && (body.image || body.photo_url || body.imageUrl || body.cover_image)) {
+      image_url = body.image || body.photo_url || body.imageUrl || body.cover_image;
     }
 
     const adminId = req.user?.id;
-    const file = getUploadedFile(req);
+    const uploadedFiles = getUploadedFiles(req);
 
-    if (file) {
-      const ext = path.extname(file.originalname || '').toLowerCase();
-      const isImage = file.mimetype.startsWith('image/') || ['.png', '.jpg', '.jpeg', '.webp', '.svg'].includes(ext);
+    if (uploadedFiles.length > 0) {
+      for (const f of uploadedFiles) {
+        const ext = path.extname(f.originalname || '').toLowerCase();
+        const isImage = f.mimetype.startsWith('image/') || ['.png', '.jpg', '.jpeg', '.webp', '.svg'].includes(ext);
+        if (isImage) {
+          const uploadResult = await uploadFileToStorage(f.originalname, f.buffer, f.mimetype, 'education');
+          image_url = uploadResult.publicUrl || uploadResult.signedUrl || uploadResult.filePath;
+        } else {
+          const uploadResult = await uploadFileToStorage(f.originalname, f.buffer, f.mimetype, 'education');
+          file_path = uploadResult.filePath;
+        }
+      }
+    }
 
-      if (isImage) {
-        // Penambahan foto materi edukasi dikelola dari BE (Sesuai Revisi FE)
-        const uploadResult = await uploadFileToStorage(file.originalname, file.buffer, file.mimetype, 'education');
-        image_url = uploadResult.publicUrl || uploadResult.signedUrl;
-      } else {
-        const uploadResult = await uploadFileToStorage(file.originalname, file.buffer, file.mimetype, 'education');
-        file_path = uploadResult.filePath;
+    // Tangani base64 image jika Superadmin mengirim via data URL (BE-03)
+    if (image_url && typeof image_url === 'string' && image_url.startsWith('data:image/')) {
+      const uploadRes = await uploadBase64ToStorage(image_url, 'education', 'edu_cover');
+      if (uploadRes) {
+        image_url = uploadRes.publicUrl || uploadRes.signedUrl || uploadRes.filePath;
+      }
+    }
+
+    // Tangani base64 berkas PDF lampiran edukasi (BE-03)
+    const rawFilePayload = body.file_data || body.pdf_base64 || (file_path?.startsWith('data:') ? file_path : null);
+    if (rawFilePayload && typeof rawFilePayload === 'string' && rawFilePayload.startsWith('data:')) {
+      const uploadRes = await uploadBase64ToStorage(rawFilePayload, 'education', 'edu_doc');
+      if (uploadRes) {
+        file_path = uploadRes.filePath;
       }
     } else if (!file_path && (body.file_url || body.filePath)) {
       file_path = body.file_url || body.filePath;
@@ -1085,12 +1205,43 @@ export const updateService = async (req: Request, res: Response): Promise<void> 
 export const deleteService = async (req: Request, res: Response): Promise<void> => {
   try {
     const id = parseInt(String(req.params.id), 10);
+    if (isNaN(id)) {
+      sendError(res, 400, 'ID layanan tidak valid');
+      return;
+    }
+
+    const service = await prisma.service.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: { consultations_projects: true },
+        },
+      },
+    });
+
+    if (!service) {
+      sendError(res, 404, 'Layanan tidak ditemukan');
+      return;
+    }
+
+    // Jika layanan terkait dengan tiket perikatan/konsultasi klien, terapkan soft-delete (BE-04)
+    if (service._count.consultations_projects > 0) {
+      await prisma.service.update({
+        where: { id },
+        data: { is_active: false },
+      });
+      sendSuccess(res, 200, 'Layanan memiliki riwayat perikatan aktif, status berhasil dinonaktifkan (soft delete)');
+      return;
+    }
+
+    // Jika tidak ada tiket tertaut, hapus permanen dari basis data
     await prisma.service.delete({ where: { id } });
-    sendSuccess(res, 200, 'Layanan berhasil dihapus');
+    sendSuccess(res, 200, 'Layanan berhasil dihapus permanen');
   } catch (error) {
     sendError(res, 500, 'Gagal menghapus layanan', (error as Error).message);
   }
 };
+
 
 // --- Update & Delete: Tax Rates ---
 export const updateTaxRate = async (req: Request, res: Response): Promise<void> => {
@@ -1131,13 +1282,23 @@ export const updateRegulation = async (req: Request, res: Response): Promise<voi
   try {
     const id = parseInt(String(req.params.id), 10);
     const body = req.body || {};
-    let { title, regulation_type, file_path, file_size, legal_status, replacement_ref } = body;
+    let { title, regulation_type, file_path, file_size, legal_status, replacement_ref, doc_number, year } = body;
     const file = getUploadedFile(req);
 
     if (file) {
       file_size = `${(file.size / 1024).toFixed(1)} KB`;
       const uploadResult = await uploadFileToStorage(file.originalname, file.buffer, file.mimetype, 'regulations');
       file_path = uploadResult.filePath;
+    } else if (file_path && String(file_path).startsWith('data:')) {
+      const uploadRes = await uploadBase64ToStorage(file_path, 'regulations', 'reg');
+      if (uploadRes) {
+        file_path = uploadRes.filePath;
+      }
+    } else if (body.file_data && String(body.file_data).startsWith('data:')) {
+      const uploadRes = await uploadBase64ToStorage(body.file_data, 'regulations', 'reg');
+      if (uploadRes) {
+        file_path = uploadRes.filePath;
+      }
     } else if (!file_path && (body.file_url || body.filePath)) {
       file_path = body.file_url || body.filePath;
     }
@@ -1147,6 +1308,10 @@ export const updateRegulation = async (req: Request, res: Response): Promise<voi
       data: {
         ...(title !== undefined && { title }),
         ...(regulation_type !== undefined && { regulation_type }),
+        ...(doc_number !== undefined && { doc_number }),
+        ...(body.nomor !== undefined && { doc_number: body.nomor }),
+        ...(year !== undefined && { year: Number(year) }),
+        ...(body.tahun !== undefined && { year: Number(body.tahun) }),
         ...(file_path !== undefined && { file_path }),
         ...(file_size !== undefined && { file_size }),
         ...(legal_status !== undefined && { legal_status }),
@@ -1190,22 +1355,40 @@ export const updateEducation = async (req: Request, res: Response): Promise<void
     if (!contentBody && (body.content || body.description)) {
       contentBody = body.content || body.description;
     }
-    if (!image_url && (body.photo_url || body.imageUrl || body.cover_image)) {
-      image_url = body.photo_url || body.imageUrl || body.cover_image;
+    // Periksa seluruh alias properti foto sampul termasuk body.image dari Frontend (BE-03)
+    if (!image_url && (body.image || body.photo_url || body.imageUrl || body.cover_image)) {
+      image_url = body.image || body.photo_url || body.imageUrl || body.cover_image;
     }
 
-    const file = getUploadedFile(req);
-    if (file) {
-      const ext = path.extname(file.originalname || '').toLowerCase();
-      const isImage = file.mimetype.startsWith('image/') || ['.png', '.jpg', '.jpeg', '.webp', '.svg'].includes(ext);
+    const uploadedFiles = getUploadedFiles(req);
+    if (uploadedFiles.length > 0) {
+      for (const f of uploadedFiles) {
+        const ext = path.extname(f.originalname || '').toLowerCase();
+        const isImage = f.mimetype.startsWith('image/') || ['.png', '.jpg', '.jpeg', '.webp', '.svg'].includes(ext);
+        if (isImage) {
+          const uploadResult = await uploadFileToStorage(f.originalname, f.buffer, f.mimetype, 'education');
+          image_url = uploadResult.publicUrl || uploadResult.signedUrl || uploadResult.filePath;
+        } else {
+          const uploadResult = await uploadFileToStorage(f.originalname, f.buffer, f.mimetype, 'education');
+          file_path = uploadResult.filePath;
+        }
+      }
+    }
 
-      if (isImage) {
-        // Foto materi edukasi diupload ke Supabase Storage (Item Penambahan Foto BE)
-        const uploadResult = await uploadFileToStorage(file.originalname, file.buffer, file.mimetype, 'education');
-        image_url = uploadResult.publicUrl || uploadResult.signedUrl;
-      } else {
-        const uploadResult = await uploadFileToStorage(file.originalname, file.buffer, file.mimetype, 'education');
-        file_path = uploadResult.filePath;
+    // Tangani base64 image (BE-03)
+    if (image_url && typeof image_url === 'string' && image_url.startsWith('data:image/')) {
+      const uploadRes = await uploadBase64ToStorage(image_url, 'education', 'edu_cover');
+      if (uploadRes) {
+        image_url = uploadRes.publicUrl || uploadRes.signedUrl || uploadRes.filePath;
+      }
+    }
+
+    // Tangani base64 PDF lampiran edukasi (BE-03)
+    const rawFilePayload = body.file_data || body.pdf_base64 || (file_path?.startsWith('data:') ? file_path : null);
+    if (rawFilePayload && typeof rawFilePayload === 'string' && rawFilePayload.startsWith('data:')) {
+      const uploadRes = await uploadBase64ToStorage(rawFilePayload, 'education', 'edu_doc');
+      if (uploadRes) {
+        file_path = uploadRes.filePath;
       }
     } else if (!file_path && (body.file_url || body.filePath)) {
       file_path = body.file_url || body.filePath;
@@ -1281,12 +1464,29 @@ export const updateCareer = async (req: Request, res: Response): Promise<void> =
 export const deleteCareer = async (req: Request, res: Response): Promise<void> => {
   try {
     const id = parseInt(String(req.params.id), 10);
+    if (isNaN(id)) {
+      sendError(res, 400, 'ID lowongan tidak valid');
+      return;
+    }
+
+    const job = await prisma.careerJob.findUnique({ where: { id } });
+    if (!job) {
+      sendError(res, 404, 'Lowongan kerja tidak ditemukan');
+      return;
+    }
+
+    // Cascade delete data pelamar uji coba pada lowongan ini (BE-04)
+    await prisma.jobApplication.deleteMany({
+      where: { job_id: id },
+    });
+
     await prisma.careerJob.delete({ where: { id } });
-    sendSuccess(res, 200, 'Lowongan kerja berhasil dihapus');
+    sendSuccess(res, 200, 'Lowongan kerja beserta berkas pelamar terkait berhasil dihapus');
   } catch (error) {
     sendError(res, 500, 'Gagal menghapus lowongan kerja', (error as Error).message);
   }
 };
+
 
 // --- Chatbot FAQs CRUD (Admin) ---
 export const getFaqs = async (_req: Request, res: Response): Promise<void> => {
@@ -1732,15 +1932,17 @@ export const deleteLearningLink = async (req: Request, res: Response): Promise<v
 // --- Modul Kurs Pajak KMK Mingguan (Batch Update & Full Sync) ---
 export const batchUpdateTaxRates = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { kmk_number, period_start, period_end, rates } = req.body || {};
+    const { kmk_number, period_start, period_end, effective_start_date, effective_end_date, rates } = req.body || {};
 
-    if (!kmk_number || !rates || !Array.isArray(rates) || rates.length === 0) {
-      sendError(res, 400, 'Nomor KMK dan daftar rates wajib diisi');
+    if (!rates || !Array.isArray(rates) || rates.length === 0) {
+      sendError(res, 400, 'Daftar kurs valas (rates) harus berupa array dan tidak boleh kosong');
       return;
     }
 
-    const startDate = period_start ? new Date(period_start) : new Date();
-    const endDate = period_end ? new Date(period_end) : new Date(startDate.getTime() + 7 * 86400000);
+    const kmk = (kmk_number || `KMK Nomor 48/MK/EF.2/${new Date().getFullYear()}`).trim();
+    const startDate = (period_start || effective_start_date) ? new Date(period_start || effective_start_date) : new Date();
+    const endDate = (period_end || effective_end_date) ? new Date(period_end || effective_end_date) : new Date(startDate.getTime() + 7 * 86400000);
+
 
     // Simpan seluruh kurs KMK secara serentak
     await prisma.$transaction(

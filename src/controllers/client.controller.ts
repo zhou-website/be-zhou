@@ -227,7 +227,7 @@ export const downloadDocument = async (req: Request, res: Response): Promise<voi
   try {
     const userRole = (req.user?.role || '').toUpperCase();
     const clientId = req.user?.id;
-    const documentId = parseInt(String(req.params.id), 10);
+    const documentId = parseInt(String(req.params.docId || req.params.id), 10);
     const isElevated = userRole === 'ADMIN' || userRole === 'SUPERADMIN';
 
     const doc = await prisma.projectDocument.findFirst({

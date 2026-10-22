@@ -10,9 +10,11 @@ import {
   createRegulation,
   updateRegulation,
   deleteRegulation,
+  downloadRegulationFile,
   createEducation,
   updateEducation,
   deleteEducation,
+  downloadEducationFile,
   createCareer,
   updateCareer,
   deleteCareer,
@@ -64,14 +66,17 @@ router.delete('/tax-rates/:id', deleteTaxRate);
 // Regulations
 router.post('/regulations', flexibleUploadMiddleware, createRegulation);
 router.put('/regulations/:id', flexibleUploadMiddleware, updateRegulation);
+router.get('/regulations/:id/download', downloadRegulationFile);
 router.patch('/regulations/:id/status', toggleRegulationStatus);
 router.delete('/regulations/:id', deleteRegulation);
 
 // Education
 router.post('/education', flexibleUploadMiddleware, createEducation);
 router.put('/education/:id', flexibleUploadMiddleware, updateEducation);
+router.get('/education/:id/download', downloadEducationFile);
 router.patch('/education/:id/status', toggleEducationStatus);
 router.delete('/education/:id', deleteEducation);
+
 
 // Learning Links (Modul Belajar Pajak)
 router.get('/learning-links', getLearningLinks);
