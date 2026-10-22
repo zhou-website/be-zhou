@@ -1,6 +1,5 @@
-import { PrismaClient } from '../generated/prisma/index.js';
-
-const prisma = new PrismaClient();
+import 'dotenv/config';
+import { prisma, pool } from '../src/config/database.js';
 
 async function main() {
   console.log('🧹 Memulai pembersihan lowongan karir dummy/seed (BE-05)...');
@@ -39,5 +38,6 @@ main()
     process.exit(1);
   })
   .finally(async () => {
+    await pool.end();
     await prisma.$disconnect();
   });
