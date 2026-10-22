@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import path from 'path';
 import { prisma } from '../config/database.js';
 import { redis } from '../config/redis.js';
+import { BUCKET_NAME } from '../config/supabase.js';
 import { sendSuccess, sendError } from '../utils/response.js';
 import { sendApplicationConfirmationEmail } from '../services/email.service.js';
 import { uploadFileToStorage, getSignedDownloadUrl, getPublicStorageUrl, deleteFileFromStorage } from '../services/storage.service.js';
@@ -14,11 +15,14 @@ const uploadBase64ToStorage = async (
   prefix: string = 'file'
 ): Promise<{ filePath: string; publicUrl?: string; signedUrl?: string } | null> => {
   try {
-    const matches = dataUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-    if (!matches || matches.length !== 3) return null;
-    const mimeType = matches[1];
-    const buffer = Buffer.from(matches[2], 'base64');
-    let ext = mimeType.split('/')[1]?.replace('jpeg', 'jpg') || 'bin';
+    const commaIdx = dataUrl.indexOf(',');
+    if (commaIdx === -1) return null;
+    const meta = dataUrl.substring(0, commaIdx);
+    const rawBase64 = dataUrl.substring(commaIdx + 1).replace(/\s/g, '');
+    const mimeMatch = meta.match(/data:([^;]+)/);
+    const mimeType = mimeMatch ? mimeMatch[1] : 'application/octet-stream';
+    const buffer = Buffer.from(rawBase64, 'base64');
+    let ext = mimeType.split('/')[1]?.replace('jpeg', 'jpg').split('+')[0] || 'bin';
     if (mimeType === 'application/pdf') ext = 'pdf';
     const fileName = `${prefix}_${Date.now()}.${ext}`;
     return await uploadFileToStorage(fileName, buffer, mimeType, folder);
@@ -26,6 +30,33 @@ const uploadBase64ToStorage = async (
     console.warn(`⚠️ Gagal unggah base64 ke storage folder ${folder}:`, (err as Error).message);
     return null;
   }
+};
+
+// Helper resolver URL foto sampul edukasi agar selalu menyajikan signed URL aktif dari Supabase
+const resolveEducationCoverImage = async (
+  imageUrl?: string | null,
+  category?: string,
+  id?: number
+): Promise<string> => {
+  if (!imageUrl) {
+    return getEducationDefaultCover(category, id || 1);
+  }
+  const cleanUrl = imageUrl.trim();
+  if (
+    cleanUrl.startsWith('education/') ||
+    cleanUrl.startsWith('documents/') ||
+    cleanUrl.includes('supabase.co/storage') ||
+    cleanUrl.includes(`/${BUCKET_NAME}/`)
+  ) {
+    try {
+      const signed = await getSignedDownloadUrl(cleanUrl, 86400);
+      if (signed) return signed;
+    } catch {
+      const pub = getPublicStorageUrl(cleanUrl);
+      if (pub) return pub;
+    }
+  }
+  return cleanUrl;
 };
 
 
@@ -500,7 +531,7 @@ export const getEducation = async (req: Request, res: Response): Promise<void> =
           download_url = await getSignedDownloadUrl(item.file_path, 3600);
           file_url = getPublicStorageUrl(item.file_path);
         }
-        const finalImage = item.image_url || getEducationDefaultCover(item.category, item.id);
+        const finalImage = await resolveEducationCoverImage(item.image_url, item.category, item.id);
         return {
           ...item,
           image_url: finalImage,
@@ -546,7 +577,7 @@ export const getEducationById = async (req: Request, res: Response): Promise<voi
       file_url = getPublicStorageUrl(item.file_path);
     }
 
-    const finalImage = item.image_url || getEducationDefaultCover(item.category, item.id);
+    const finalImage = await resolveEducationCoverImage(item.image_url, item.category, item.id);
 
     sendSuccess(res, 200, 'Berhasil memuat detail materi edukasi', {
       ...item,
@@ -612,7 +643,7 @@ export const createEducation = async (req: Request, res: Response): Promise<void
         const isImage = f.mimetype.startsWith('image/') || ['.png', '.jpg', '.jpeg', '.webp', '.svg'].includes(ext);
         if (isImage) {
           const uploadResult = await uploadFileToStorage(f.originalname, f.buffer, f.mimetype, 'education');
-          image_url = uploadResult.publicUrl || uploadResult.signedUrl || uploadResult.filePath;
+          image_url = uploadResult.filePath;
         } else {
           const uploadResult = await uploadFileToStorage(f.originalname, f.buffer, f.mimetype, 'education');
           file_path = uploadResult.filePath;
@@ -624,7 +655,9 @@ export const createEducation = async (req: Request, res: Response): Promise<void
     if (image_url && typeof image_url === 'string' && image_url.startsWith('data:image/')) {
       const uploadRes = await uploadBase64ToStorage(image_url, 'education', 'edu_cover');
       if (uploadRes) {
-        image_url = uploadRes.publicUrl || uploadRes.signedUrl || uploadRes.filePath;
+        image_url = uploadRes.filePath;
+      } else {
+        image_url = null;
       }
     }
 
@@ -663,7 +696,7 @@ export const createEducation = async (req: Request, res: Response): Promise<void
       file_url = getPublicStorageUrl(item.file_path);
     }
 
-    const finalImage = item.image_url || getEducationDefaultCover(item.category, item.id);
+    const finalImage = await resolveEducationCoverImage(item.image_url, item.category, item.id);
 
     sendSuccess(res, 201, 'Konten edukasi berhasil dipublikasikan ke Supabase', {
       ...item,
@@ -1367,7 +1400,7 @@ export const updateEducation = async (req: Request, res: Response): Promise<void
         const isImage = f.mimetype.startsWith('image/') || ['.png', '.jpg', '.jpeg', '.webp', '.svg'].includes(ext);
         if (isImage) {
           const uploadResult = await uploadFileToStorage(f.originalname, f.buffer, f.mimetype, 'education');
-          image_url = uploadResult.publicUrl || uploadResult.signedUrl || uploadResult.filePath;
+          image_url = uploadResult.filePath;
         } else {
           const uploadResult = await uploadFileToStorage(f.originalname, f.buffer, f.mimetype, 'education');
           file_path = uploadResult.filePath;
@@ -1379,7 +1412,9 @@ export const updateEducation = async (req: Request, res: Response): Promise<void
     if (image_url && typeof image_url === 'string' && image_url.startsWith('data:image/')) {
       const uploadRes = await uploadBase64ToStorage(image_url, 'education', 'edu_cover');
       if (uploadRes) {
-        image_url = uploadRes.publicUrl || uploadRes.signedUrl || uploadRes.filePath;
+        image_url = uploadRes.filePath;
+      } else {
+        image_url = undefined; // Jangan override jika upload base64 gagal
       }
     }
 
@@ -1413,7 +1448,7 @@ export const updateEducation = async (req: Request, res: Response): Promise<void
       file_url = getPublicStorageUrl(updated.file_path);
     }
 
-    const finalImage = updated.image_url || getEducationDefaultCover(updated.category, updated.id);
+    const finalImage = await resolveEducationCoverImage(updated.image_url, updated.category, updated.id);
 
     sendSuccess(res, 200, 'Materi edukasi berhasil diperbarui', {
       ...updated,

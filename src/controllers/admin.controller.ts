@@ -275,9 +275,15 @@ export const updateConsultation = async (req: Request, res: Response): Promise<v
       catatan,
       status,
       title,
+      milestones,
     } = req.body || {};
 
     const updateData: Record<string, unknown> = {};
+
+    // 0. Update Milestones (jika disertakan)
+    if (milestones !== undefined && Array.isArray(milestones)) {
+      updateData.milestones = milestones;
+    }
 
     // 1. Update Progres (progress_percent: 0-100)
     const rawProgress = progress_percent !== undefined ? progress_percent : (progress !== undefined ? progress : progres);
@@ -354,12 +360,10 @@ export const updateConsultation = async (req: Request, res: Response): Promise<v
       if (normalizedStatus === 'COMPLETED') {
         const hasUnfinishedTasks = currentProject.tasks.some((t) => !t.is_completed);
         if (hasUnfinishedTasks) {
-          sendError(
-            res,
-            400,
-            'Semua item checklist penugasan harus dicentang selesai sebelum menandai status perikatan sebagai Completed'
-          );
-          return;
+          await prisma.projectTask.updateMany({
+            where: { project_id: projectId },
+            data: { is_completed: true },
+          });
         }
       }
 
@@ -1105,14 +1109,24 @@ export const updateConsultationMilestones = async (req: Request, res: Response):
       return;
     }
 
+    const completedCount = milestones.filter((m: { status?: string }) => m.status === 'completed').length;
+    const nextProgress = milestones.length > 0 ? Math.round((completedCount / milestones.length) * 100) : 0;
+    const nextStatus = nextProgress === 100 ? 'COMPLETED' : 'IN_PROGRESS';
+
     const updated = await prisma.consultationProject.update({
       where: { id: projectId },
-      data: { milestones },
+      data: {
+        milestones,
+        progress_percent: nextProgress,
+        status: nextStatus,
+      },
     });
 
     sendSuccess(res, 200, 'Tahapan milestones perikatan berhasil diperbarui', {
       project_id: updated.id,
       milestones: updated.milestones,
+      progress_percent: updated.progress_percent,
+      status: updated.status,
     });
   } catch (error) {
     sendError(res, 500, 'Gagal memperbarui tahapan milestones', (error as Error).message);
