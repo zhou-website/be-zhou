@@ -6,6 +6,8 @@ import adminRoutes from './admin.routes.js';
 import cmsRoutes from './cms.routes.js';
 import superadminRoutes from './superadmin.routes.js';
 import publicRoutes from './public.routes.js';
+import { requireAuth, requireRole } from '../middlewares/auth.middleware.js';
+import { getConsultationMessages } from '../controllers/client.controller.js';
 
 const router = Router();
 
@@ -16,9 +18,17 @@ router.use('/client', clientRoutes);
 router.use('/admin', adminRoutes);
 router.use('/admin/cms', cmsRoutes);
 router.use('/superadmin', superadminRoutes);
+
+// Shared ticket correspondence endpoint: GET /api/v1/consultations/:id/messages
+router.get(
+  '/consultations/:id/messages',
+  requireAuth,
+  requireRole('USER', 'ADMIN', 'SUPERADMIN'),
+  getConsultationMessages
+);
+
 router.use('/public', publicRoutes);
 // Alias rute publik langsung di bawah /api/v1 (misal /api/v1/careers/:id/apply atau /api/v1/services)
 router.use('/', publicRoutes);
-
 
 export default router;

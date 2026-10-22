@@ -8,6 +8,7 @@ let server: http.Server;
 let baseUrl = '';
 let superadminToken = '';
 let adminToken = '';
+let adminUserId = 0;
 let clientToken = '';
 
 describe('🎯 Zhou Consulting — FE Revisions End-to-End Integration Test Suite', () => {
@@ -45,6 +46,7 @@ describe('🎯 Zhou Consulting — FE Revisions End-to-End Integration Test Suit
     const admData = await admRes.json();
     assert.strictEqual(admRes.status, 200);
     adminToken = admData.data.token;
+    adminUserId = admData.data.user.id;
 
     const cliRes = await fetch(`${baseUrl}/api/v1/auth/login`, {
       method: 'POST',
@@ -100,7 +102,10 @@ describe('🎯 Zhou Consulting — FE Revisions End-to-End Integration Test Suit
 
   test('2.3 Superadmin can update admin password and delete audit logs from database server', async () => {
     // 1. Update admin password
-    const updateRes = await fetch(`${baseUrl}/api/v1/superadmin/admins/2`, {
+    const targetAdmin = await prisma.user.findFirst({ where: { email: 'admin@zhouconsulting.com' } });
+    const adminId = targetAdmin ? targetAdmin.id : 2;
+
+    const updateRes = await fetch(`${baseUrl}/api/v1/superadmin/admins/${adminId}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -126,7 +131,7 @@ describe('🎯 Zhou Consulting — FE Revisions End-to-End Integration Test Suit
     assert.strictEqual(loginRes.status, 200);
 
     // Reset password back to Admin123!
-    await fetch(`${baseUrl}/api/v1/superadmin/admins/2`, {
+    await fetch(`${baseUrl}/api/v1/superadmin/admins/${adminId}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -170,11 +175,11 @@ describe('🎯 Zhou Consulting — FE Revisions End-to-End Integration Test Suit
         'Content-Type': 'application/json',
         Authorization: `Bearer ${superadminToken}`,
       },
-      body: JSON.stringify({ assigned_admin_id: 2 }),
+      body: JSON.stringify({ assigned_admin_id: adminUserId }),
     });
     const assignData = await assignRes.json();
     assert.strictEqual(assignRes.status, 200);
-    assert.strictEqual(assignData.data.assigned_admin_id, 2);
+    assert.strictEqual(assignData.data.assigned_admin_id, adminUserId);
   });
 
   test('3.1 Admin & Superadmin can update progress, PIC, and notes via PUT /api/v1/admin/consultations/:id', async () => {
@@ -211,14 +216,14 @@ describe('🎯 Zhou Consulting — FE Revisions End-to-End Integration Test Suit
       },
       body: JSON.stringify({
         progress_percent: 85,
-        assigned_admin_id: 2,
+        assigned_admin_id: adminUserId,
         description: 'Review final oleh Senior Tax Consultant sebelum penyerahan laporan ke klien.',
       }),
     });
     const saUpdateData = await saUpdateRes.json();
     assert.strictEqual(saUpdateRes.status, 200);
     assert.strictEqual(saUpdateData.data.progress_percent, 85);
-    assert.strictEqual(saUpdateData.data.assigned_admin_id, 2);
+    assert.strictEqual(saUpdateData.data.assigned_admin_id, adminUserId);
   });
 
   test('4. Admin only sees tickets assigned to them, while Superadmin sees all', async () => {
@@ -227,9 +232,9 @@ describe('🎯 Zhou Consulting — FE Revisions End-to-End Integration Test Suit
     });
     const dataAdm = await resAdm.json();
     assert.strictEqual(resAdm.status, 200);
-    // Returned projects for this admin must either be assigned to them (id: 2) or unassigned (null) awaiting handling
+    // Returned projects for this admin must either be assigned to them or unassigned (null) awaiting handling
     for (const proj of dataAdm.data) {
-      assert.ok(proj.assigned_admin_id === 2 || proj.assigned_admin_id === null, 'Admin can view assigned or unassigned tickets');
+      assert.ok(proj.assigned_admin_id === adminUserId || proj.assigned_admin_id === null, 'Admin can view assigned or unassigned tickets');
     }
   });
 
@@ -331,5 +336,12 @@ describe('🎯 Zhou Consulting — FE Revisions End-to-End Integration Test Suit
       headers: { Authorization: `Bearer ${superadminToken}` },
     });
     assert.strictEqual(resSa.status, 200);
+  });
+
+  after(async () => {
+    if (server) {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+    setTimeout(() => process.exit(0), 100);
   });
 });

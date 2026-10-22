@@ -216,40 +216,9 @@ async function main() {
     console.log(`✅ Chatbot FAQs seeded (3 questions)`);
   }
 
-  // 6. Seed Career Jobs
-  const jobs = [
-    {
-      position_code: 'JOB-TAX-SR-01',
-      position_title: 'Senior Tax Consultant',
-      level: 'Senior Associate',
-      location: 'Jakarta (Hybrid)',
-      description: 'Mencari konsultan pajak berpengalaman minimal 3 tahun dengan sertifikasi Brevet AB/C untuk menangani klien korporasi multinasional.',
-      is_active: true,
-    },
-    {
-      position_code: 'JOB-ACC-JR-01',
-      position_title: 'Junior Accounting Staff',
-      level: 'Entry Level',
-      location: 'Jakarta (On-site)',
-      description: 'Lulusan S1 Akuntansi dengan pemahaman siklus akuntansi komprehensif, teliti, dan menguasai software akuntansi.',
-      is_active: true,
-    },
-  ];
+  // 6. Seed Career Jobs (Dikosongkan sesuai arahan PM Post-Deploy BE-05 agar tidak mengotori landing page)
+  console.log(`ℹ️ Career Jobs seed dilewati (Menunggu lowongan resmi dipublikasikan oleh Superadmin via CMS)`);
 
-  for (const job of jobs) {
-    await prisma.careerJob.upsert({
-      where: { position_code: job.position_code },
-      update: {
-        position_title: job.position_title,
-        level: job.level,
-        location: job.location,
-        description: job.description,
-        is_active: job.is_active,
-      },
-      create: job,
-    });
-  }
-  console.log(`✅ Career Jobs seeded (${jobs.length} positions)`);
 
   // 7. Seed Sample Consultation Project for Client
   const taxService = await prisma.service.findUnique({ where: { service_code: 'TAX_CORE' } });

@@ -153,6 +153,14 @@ export const getConsultationDetail = async (req: Request, res: Response): Promis
             phone: true,
           },
         },
+        messages: {
+          include: {
+            sender: {
+              select: { id: true, name: true, role: true },
+            },
+          },
+          orderBy: { created_at: 'asc' },
+        },
       },
     });
 
@@ -219,7 +227,7 @@ export const downloadDocument = async (req: Request, res: Response): Promise<voi
   try {
     const userRole = (req.user?.role || '').toUpperCase();
     const clientId = req.user?.id;
-    const documentId = parseInt(String(req.params.id), 10);
+    const documentId = parseInt(String(req.params.docId || req.params.id), 10);
     const isElevated = userRole === 'ADMIN' || userRole === 'SUPERADMIN';
 
     const doc = await prisma.projectDocument.findFirst({
@@ -605,4 +613,181 @@ export const uploadClientDocument = async (req: Request, res: Response): Promise
     sendError(res, 500, 'Gagal mengunggah dokumen klien', (error as Error).message);
   }
 };
+
+export const createClientMessage = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const clientId = req.user?.id;
+    const userRole = (req.user?.role || 'USER').toUpperCase();
+    const projectId = parseInt(String(req.params.id), 10);
+    const { message } = req.body || {};
+
+    if (isNaN(projectId)) {
+      sendError(res, 400, 'ID konsultasi tidak valid');
+      return;
+    }
+    if (!message || String(message).trim().length === 0) {
+      sendError(res, 400, 'Pesan obrolan tidak boleh kosong');
+      return;
+    }
+
+    const isElevated = userRole === 'ADMIN' || userRole === 'SUPERADMIN';
+    const project = await prisma.consultationProject.findFirst({
+      where: isElevated ? { id: projectId } : { id: projectId, client_id: clientId },
+    });
+
+    if (!project) {
+      sendError(res, 404, 'Tiket konsultasi tidak ditemukan atau Anda tidak memiliki akses');
+      return;
+    }
+
+    const newMsg = await prisma.consultationMessage.create({
+      data: {
+        project_id: projectId,
+        sender_id: clientId!,
+        sender_role: userRole,
+        message: String(message).trim(),
+      },
+      include: {
+        sender: {
+          select: { id: true, name: true, role: true },
+        },
+      },
+    });
+
+    sendSuccess(res, 201, 'Pesan terkirim', {
+      id: newMsg.id,
+      project_id: newMsg.project_id,
+      sender_id: newMsg.sender_id,
+      sender_name: newMsg.sender?.name || 'Klien',
+      sender_role: newMsg.sender_role,
+      message: newMsg.message,
+      created_at: newMsg.created_at,
+    });
+  } catch (error) {
+    sendError(res, 500, 'Gagal mengirim pesan konsultasi', (error as Error).message);
+  }
+};
+
+export const getConsultationMessages = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const clientId = req.user?.id;
+    const userRole = (req.user?.role || 'USER').toUpperCase();
+    const projectId = parseInt(String(req.params.id), 10);
+
+    if (isNaN(projectId)) {
+      sendError(res, 400, 'ID konsultasi tidak valid');
+      return;
+    }
+
+    const isElevated = userRole === 'ADMIN' || userRole === 'SUPERADMIN';
+    const project = await prisma.consultationProject.findFirst({
+      where: isElevated ? { id: projectId } : { id: projectId, client_id: clientId },
+    });
+
+    if (!project) {
+      sendError(res, 404, 'Tiket konsultasi tidak ditemukan atau Anda tidak memiliki akses');
+      return;
+    }
+
+    const page = Math.max(1, parseInt(String(req.query.page || '1'), 10));
+    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || '50'), 10)));
+    const skip = (page - 1) * limit;
+
+    const messages = await prisma.consultationMessage.findMany({
+      where: { project_id: projectId },
+      include: {
+        sender: {
+          select: { id: true, name: true, role: true },
+        },
+      },
+      orderBy: { created_at: 'asc' },
+      skip,
+      take: limit,
+    });
+
+    const formatted = messages.map((m) => ({
+      id: m.id,
+      project_id: m.project_id,
+      sender_id: m.sender_id,
+      sender_name: m.sender?.name || 'Pengguna',
+      sender_role: m.sender_role,
+      message: m.message,
+      created_at: m.created_at,
+    }));
+
+    sendSuccess(res, 200, 'Berhasil memuat riwayat pesan konsultasi', formatted);
+  } catch (error) {
+    sendError(res, 500, 'Gagal memuat riwayat pesan', (error as Error).message);
+  }
+};
+
+export const deleteClientConsultation = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const clientId = req.user?.id;
+    const userRole = (req.user?.role || 'USER').toUpperCase();
+    const projectId = parseInt(String(req.params.id), 10);
+
+    if (isNaN(projectId)) {
+      sendError(res, 400, 'ID perikatan tidak valid');
+      return;
+    }
+
+    const isElevated = userRole === 'ADMIN' || userRole === 'SUPERADMIN';
+    const project = await prisma.consultationProject.findFirst({
+      where: isElevated ? { id: projectId } : { id: projectId, client_id: clientId },
+    });
+
+    if (!project) {
+      sendError(res, 404, 'Tiket konsultasi tidak ditemukan atau Anda tidak memiliki akses');
+      return;
+    }
+
+    await prisma.consultationProject.delete({
+      where: { id: projectId },
+    });
+
+    sendSuccess(res, 200, 'Permohonan konsultasi berhasil dibatalkan');
+  } catch (error) {
+    sendError(res, 500, 'Gagal membatalkan permohonan konsultasi', (error as Error).message);
+  }
+};
+
+export const archiveClientConsultation = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const clientId = req.user?.id;
+    const userRole = (req.user?.role || 'USER').toUpperCase();
+    const projectId = parseInt(String(req.params.id), 10);
+    const { is_archived } = req.body || {};
+
+    if (isNaN(projectId)) {
+      sendError(res, 400, 'ID konsultasi tidak valid');
+      return;
+    }
+
+    const isElevated = userRole === 'ADMIN' || userRole === 'SUPERADMIN';
+    const project = await prisma.consultationProject.findFirst({
+      where: isElevated ? { id: projectId } : { id: projectId, client_id: clientId },
+    });
+
+    if (!project) {
+      sendError(res, 404, 'Tiket konsultasi tidak ditemukan atau Anda tidak memiliki akses');
+      return;
+    }
+
+    const updated = await prisma.consultationProject.update({
+      where: { id: projectId },
+      data: {
+        is_archived: is_archived !== undefined ? Boolean(is_archived) : true,
+      },
+    });
+
+    sendSuccess(res, 200, 'Tiket berhasil diarsipkan', {
+      id: updated.id,
+      is_archived: updated.is_archived,
+    });
+  } catch (error) {
+    sendError(res, 500, 'Gagal mengarsipkan tiket konsultasi', (error as Error).message);
+  }
+};
+
 
