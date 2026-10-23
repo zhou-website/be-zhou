@@ -1,11 +1,25 @@
 import { resend, FROM_EMAIL, REPLY_TO_EMAIL } from '../config/resend.js';
 
+/**
+ * Mengambil base URL frontend utama yang bersih untuk tautan email.
+ * Mencegah penggabungan banyak origin (koma) dari konfigurasi CORS FRONTEND_URL.
+ */
+const getFrontendBaseUrl = (): string => {
+  if (process.env.FRONTEND_PUBLIC_URL) {
+    return process.env.FRONTEND_PUBLIC_URL.trim().replace(/\/+$/, '');
+  }
+  const raw = process.env.FRONTEND_URL || 'https://zhouconsulting.id';
+  const urls = raw.split(',').map((u) => u.trim()).filter(Boolean);
+  const primary = urls.find((u) => !u.includes('localhost')) || urls[0] || 'https://zhouconsulting.id';
+  return primary.replace(/\/+$/, '');
+};
+
 export const sendAdminCredentialsEmail = async (
   recipientEmail: string,
   adminName: string,
   initialPassword: string
 ): Promise<{ success: boolean; message: string }> => {
-  const loginUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login`;
+  const loginUrl = `${getFrontendBaseUrl()}/login`;
 
   if (!resend) {
     console.log(`[Resend Mock] Mengirim kredensial staf admin ke: ${recipientEmail}`);
@@ -75,7 +89,7 @@ export const sendPasswordResetEmail = async (
   recipientEmail: string,
   resetToken: string
 ): Promise<void> => {
-  const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
+  const resetUrl = `${getFrontendBaseUrl()}/reset-password?token=${resetToken}`;
 
   if (!resend) {
     console.log(`[Resend Mock] Mengirim tautan reset password ke: ${recipientEmail}`);
