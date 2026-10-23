@@ -5,6 +5,7 @@ import { redis } from '../config/redis.js';
 import { sendSuccess, sendError } from '../utils/response.js';
 import { getSignedDownloadUrl, uploadFileToStorage } from '../services/storage.service.js';
 import { getUploadedFile } from '../middlewares/upload.middleware.js';
+import { sendNewConsultationNotificationEmail } from '../services/email.service.js';
 
 
 export const getDashboardOverview = async (req: Request, res: Response): Promise<void> => {
@@ -541,6 +542,22 @@ ${cleanDesc}`;
     } catch (auditErr) {
       console.warn('⚠️ Gagal mencatat audit log permohonan konsultasi:', (auditErr as Error).message);
     }
+
+    // Kirim notifikasi email tiket konsultasi baru ke Kak Ewi & Superadmin (non-blocking)
+    sendNewConsultationNotificationEmail({
+      ticketCode: newProject.project_code,
+      clientName: newProject.client.name,
+      clientEmail: newProject.client.email,
+      clientPhone: newProject.client.phone,
+      companyName: newProject.client.company_name,
+      title: newProject.title,
+      category: category || 'Tax Service Core',
+      urgency: selectedPriority,
+      description: cleanDesc,
+      isPublic: false,
+    }).catch((emailErr) => {
+      console.warn('⚠️ Gagal mengirim notifikasi email tiket konsultasi baru:', (emailErr as Error).message);
+    });
 
     sendSuccess(res, 201, 'Permohonan konsultasi baru berhasil dibuat dan diteruskan ke sistem operasional', newProject);
   } catch (error) {
