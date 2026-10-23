@@ -1,4 +1,4 @@
-import { resend, FROM_EMAIL } from '../config/resend.js';
+import { resend, FROM_EMAIL, REPLY_TO_EMAIL } from '../config/resend.js';
 
 export const sendAdminCredentialsEmail = async (
   recipientEmail: string,
@@ -18,6 +18,7 @@ export const sendAdminCredentialsEmail = async (
     const { data, error } = await resend.emails.send({
       from: FROM_EMAIL,
       to: recipientEmail,
+      replyTo: REPLY_TO_EMAIL,
       subject: 'Kredensial Akun Staf Admin — Zhou Consulting',
       html: `
         <div style="font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #1e293b; max-width: 600px; margin: auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
@@ -86,6 +87,7 @@ export const sendPasswordResetEmail = async (
     await resend.emails.send({
       from: FROM_EMAIL,
       to: recipientEmail,
+      replyTo: REPLY_TO_EMAIL,
       subject: 'Permintaan Reset Kata Sandi — Zhou Consulting',
       html: `
         <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
@@ -118,6 +120,7 @@ export const sendApplicationConfirmationEmail = async (
     await resend.emails.send({
       from: FROM_EMAIL,
       to: applicantEmail,
+      replyTo: REPLY_TO_EMAIL,
       subject: `Konfirmasi Penerimaan Lamaran — ${positionTitle}`,
       html: `
         <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: auto; padding: 20px;">
