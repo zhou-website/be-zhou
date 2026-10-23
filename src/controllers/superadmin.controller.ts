@@ -282,38 +282,14 @@ export const exportAuditLogs = async (_req: Request, res: Response): Promise<voi
   }
 };
 
-export const deleteAuditLogs = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { id } = req.params;
-    const { admin_id, client_id, project_id, before_date } = req.query;
-
-    const where: Record<string, unknown> = {};
-    if (id) {
-      const parsedId = parseInt(String(id), 10);
-      if (isNaN(parsedId)) {
-        sendError(res, 400, 'ID log audit tidak valid');
-        return;
-      }
-      where.id = parsedId;
-    } else {
-      if (admin_id) where.admin_id = Number(admin_id);
-      if (client_id) where.client_id = Number(client_id);
-      if (project_id) where.project_id = Number(project_id);
-      if (before_date) {
-        where.created_at = { lte: new Date(String(before_date)) };
-      }
-    }
-
-    const deleteResult = await prisma.auditLog.deleteMany({
-      where,
-    });
-
-    sendSuccess(res, 200, 'Riwayat log audit berhasil dihapus dari database server', {
-      deleted_count: deleteResult.count,
-    });
-  } catch (error) {
-    sendError(res, 500, 'Gagal menghapus log audit dari database', (error as Error).message);
-  }
+export const deleteAuditLogs = async (_req: Request, res: Response): Promise<void> => {
+  // Integritas Sistem: Audit Log bersifat Append-Only (Immutable).
+  // Dilarang keras dihapus oleh peran apapun demi kepatuhan hukum, forensik audit, dan mitigasi anti-tampering.
+  sendError(
+    res,
+    403,
+    'Aksi ditolak: Riwayat log audit bersifat Append-Only (immutable) dan tidak dapat dihapus demi kepatuhan integritas audit sistem perpajakan.'
+  );
 };
 
 export const updateAdmin = async (req: Request, res: Response): Promise<void> => {

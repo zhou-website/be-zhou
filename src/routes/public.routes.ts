@@ -26,6 +26,7 @@ import {
 import { validate } from '../middlewares/validator.middleware.js';
 import { contactFormSchema } from '../schemas/public.schema.js';
 import { flexibleUploadMiddleware } from '../middlewares/upload.middleware.js';
+import { uploadRateLimiter } from '../middlewares/rateLimiter.middleware.js';
 import { getChatbotTree } from '../controllers/client.controller.js';
 
 const router = Router();
@@ -59,8 +60,8 @@ router.get('/careers/:id', getCareerById);
 router.post('/careers/general/apply', flexibleUploadMiddleware, applyGeneralCareer);
 router.post('/careers/:id/apply', flexibleUploadMiddleware, applyCareer);
 
-// Public File Upload Helper (misal upload CV, berkas edukasi, atau formulir publik ke Supabase Storage)
-router.post('/upload', flexibleUploadMiddleware, uploadPublicFile);
+// Public File Upload Helper dengan pembatasan kuota upload rate limit
+router.post('/upload', uploadRateLimiter, flexibleUploadMiddleware, uploadPublicFile);
 
 // Contact & Settings & Public Consultations
 router.get('/settings/contact', getContactSettings);

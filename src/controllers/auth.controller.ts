@@ -112,6 +112,14 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       { expiresIn: '1d' }
     );
 
+    // Set HttpOnly Cookie sebagai mitigasi pertahanan berlapis pencurian token (Defense-in-Depth)
+    res.cookie('zhou_auth_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 24 * 60 * 60 * 1000,
+    });
+
     sendSuccess(res, 200, 'Login berhasil', {
       token,
       user: {
@@ -131,33 +139,35 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
 export const googleLogin = async (req: Request, res: Response): Promise<void> => {
   try {
+    const idToken = req.body?.id_token || req.body?.credential || req.body?.token;
     let email = req.body?.email;
     let name = req.body?.name;
-    const idToken = req.body?.id_token || req.body?.credential || req.body?.token;
 
-    // Jika frontend mengirimkan ID token Google, verifikasi secara kriptografis
-    if (idToken && googleClient && GOOGLE_CLIENT_ID) {
-      try {
-        const ticket = await googleClient.verifyIdToken({
-          idToken,
-          audience: GOOGLE_CLIENT_ID,
-        });
-        const payload = ticket.getPayload();
-        if (payload?.email) {
-          email = payload.email;
-          name = payload.name || name || 'Google Client User';
-        }
-      } catch (verifyErr) {
-        sendError(res, 401, 'Token Google OAuth tidak valid atau telah kedaluwarsa');
-        return;
-      }
-    } else if (process.env.NODE_ENV === 'production' && GOOGLE_CLIENT_ID) {
-      sendError(res, 400, 'ID token Google OAuth wajib disertakan di lingkungan produksi');
+    // Keamanan Ketat: Token Google OAuth kriptografis wajib disertakan untuk mencegah spoofing akun
+    if (!idToken) {
+      sendError(res, 400, 'Kredensial token Google OAuth (credential / id_token) wajib disertakan');
       return;
     }
 
-    if (!email) {
-      sendError(res, 400, 'Data Google OAuth tidak lengkap. Sediakan id_token atau email.');
+    if (!googleClient || !GOOGLE_CLIENT_ID) {
+      sendError(res, 503, 'Layanan autentikasi Google OAuth belum dikonfigurasi di server');
+      return;
+    }
+
+    try {
+      const ticket = await googleClient.verifyIdToken({
+        idToken,
+        audience: GOOGLE_CLIENT_ID,
+      });
+      const payload = ticket.getPayload();
+      if (!payload?.email) {
+        sendError(res, 401, 'Token Google OAuth tidak memiliki identitas email yang valid');
+        return;
+      }
+      email = payload.email;
+      name = payload.name || name || 'Google Client User';
+    } catch (verifyErr) {
+      sendError(res, 401, 'Token Google OAuth tidak valid atau telah kedaluwarsa');
       return;
     }
 
@@ -198,6 +208,14 @@ export const googleLogin = async (req: Request, res: Response): Promise<void> =>
       JWT_SECRET,
       { expiresIn: '1d' }
     );
+
+    // Set HttpOnly Cookie sebagai mitigasi pertahanan berlapis pencurian token
+    res.cookie('zhou_auth_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 24 * 60 * 60 * 1000,
+    });
 
     sendSuccess(res, 200, 'Login Google OAuth berhasil', {
       token,
@@ -298,6 +316,7 @@ export const logout = async (req: Request, res: Response): Promise<void> => {
       // Simpan jti ke Redis blacklist selama 24 jam (86400 detik)
       await redis.set(`blacklist:${jti}`, 'revoked', 'EX', 86400);
     }
+    res.clearCookie('zhou_auth_token');
     sendSuccess(res, 200, 'Logout berhasil, sesi telah dicabut');
   } catch (error) {
     sendError(res, 500, 'Gagal memproses logout', (error as Error).message);

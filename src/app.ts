@@ -8,7 +8,7 @@ import { apiReference } from '@scalar/express-api-reference';
 import { prisma } from './config/database.js';
 import { redis } from './config/redis.js';
 import { initSentry } from './config/sentry.js';
-import { apiRateLimiter } from './middlewares/rateLimiter.middleware.js';
+import { apiRateLimiter, healthRateLimiter } from './middlewares/rateLimiter.middleware.js';
 import apiRoutes from './routes/index.js';
 import { getApiGuide } from './controllers/guide.controller.js';
 
@@ -113,8 +113,8 @@ app.use(
         return callback(null, true);
       }
 
-      // Izinkan origin lain secara fleksibel untuk kemudahan integrasi tim frontend / pengujian API
-      return callback(null, true);
+      // Tolak origin yang tidak terdaftar demi keamanan kredensial dan pencegahan serangan lintas domain (CORS Protection)
+      return callback(new Error('Akses diblokir oleh kebijakan keamanan CORS'));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
@@ -159,8 +159,8 @@ const serveFavicon = (_req: Request, res: Response) => {
 app.get('/favicon.ico', serveFavicon);
 app.get('/docs/favicon.ico', serveFavicon);
 
-// Health check endpoint
-app.get('/api/health', async (_req: Request, res: Response) => {
+// Health check endpoint dengan proteksi rate limit dan sanitasi error informasi internal
+app.get('/api/health', healthRateLimiter, async (_req: Request, res: Response) => {
   let dbStatus = 'disconnected';
   let dbError: string | null = null;
 
@@ -189,7 +189,7 @@ app.get('/api/health', async (_req: Request, res: Response) => {
     message: isHealthy
       ? 'Seluruh layanan backend (Database PostgreSQL & Cache Redis) berjalan normal.'
       : `Database PostgreSQL belum aktif atau belum dapat dihubungi. Pastikan Docker aktif dengan: docker compose up -d`,
-    error: dbError || undefined,
+    error: process.env.NODE_ENV === 'development' ? (dbError || undefined) : undefined,
   });
 });
 

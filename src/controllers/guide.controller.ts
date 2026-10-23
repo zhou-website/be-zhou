@@ -18,13 +18,13 @@ export const getApiGuide = (req: Request, res: Response): void => {
     testingAccounts: {
       superadmin: {
         email: 'superadmin@zhouconsulting.com',
-        password: 'SuperAdmin123!',
         role: 'SUPERADMIN',
+        status: 'Terproteksi (Kredensial staf internal)',
       },
       admin: {
         email: 'admin@zhouconsulting.com',
-        password: 'Admin123!',
         role: 'ADMIN',
+        status: 'Terproteksi (Kredensial staf internal)',
       },
     },
     authenticationFlow: {
@@ -35,7 +35,7 @@ export const getApiGuide = (req: Request, res: Response): void => {
     corsStatus: {
       enabled: true,
       credentials: true,
-      allowedOrigins: 'Semua origin diizinkan selama masa pengujian & deployment (localhost:3000, localhost:5173, PM laptop, preview URL, dll.)',
+      allowedOrigins: 'Dibatasi secara ketat pada domain resmi Zhou Consulting & preview terverifikasi (Strict Whitelist)',
     },
     popularEndpoints: [
       { method: 'GET', path: '/docs', description: 'Interactive Scalar API Documentation (Coba langsung di browser)' },
@@ -396,7 +396,7 @@ export const getApiGuide = (req: Request, res: Response): void => {
           </div>
           <div class="credential-row">
             <span class="credential-label">Password:</span>
-            <span class="credential-value">SuperAdmin123!</span>
+            <span class="credential-value" style="color: #94a3b8;">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull; (Tersimpan aman di Vault)</span>
           </div>
         </div>
 
@@ -408,7 +408,7 @@ export const getApiGuide = (req: Request, res: Response): void => {
           </div>
           <div class="credential-row">
             <span class="credential-label">Password:</span>
-            <span class="credential-value">Admin123!</span>
+            <span class="credential-value" style="color: #94a3b8;">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull; (Tersimpan aman di Vault)</span>
           </div>
         </div>
 

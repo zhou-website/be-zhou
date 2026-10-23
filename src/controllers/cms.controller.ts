@@ -982,8 +982,12 @@ export const uploadPublicFile = async (req: Request, res: Response): Promise<voi
       return;
     }
 
-    const folder = req.body?.folder || req.query?.folder || 'documents';
-    const uploadResult = await uploadFileToStorage(file.originalname, file.buffer, file.mimetype, String(folder));
+    const rawFolder = String(req.body?.folder || req.query?.folder || 'documents').toLowerCase().trim();
+    // Whitelist folder penyimpanan resmi yang diizinkan untuk mencegah path traversal / storage abuse
+    const ALLOWED_FOLDERS = ['documents', 'cvs', 'educations', 'general'];
+    const safeFolder = ALLOWED_FOLDERS.includes(rawFolder) ? rawFolder : 'documents';
+
+    const uploadResult = await uploadFileToStorage(file.originalname, file.buffer, file.mimetype, safeFolder);
     const signedUrl = await getSignedDownloadUrl(uploadResult.filePath, 3600);
     const publicUrl = getPublicStorageUrl(uploadResult.filePath);
 

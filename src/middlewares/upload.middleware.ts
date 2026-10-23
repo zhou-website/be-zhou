@@ -18,7 +18,6 @@ const ALLOWED_MIME_TYPES = [
   'image/jpeg',
   'image/jpg',
   'image/webp',
-  'image/svg+xml',
 ];
 
 const ALLOWED_EXTENSIONS = [
@@ -36,7 +35,6 @@ const ALLOWED_EXTENSIONS = [
   '.jpg',
   '.jpeg',
   '.webp',
-  '.svg',
 ];
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 Megabytes (Maksimal fleksibel untuk berkas materi edukasi & CV)
@@ -54,7 +52,7 @@ const fileFilter = (
   } else {
     cb(
       new Error(
-        'Format berkas tidak didukung. Format yang didukung: PDF, DOCX, DOC, PPTX, PPT, XLSX, XLS, CSV, TXT, ZIP, PNG, JPEG, WEBP, dan SVG (Maksimal 10MB).'
+        'Format berkas tidak didukung. Format yang didukung: PDF, DOCX, DOC, PPTX, PPT, XLSX, XLS, CSV, TXT, ZIP, PNG, JPEG, dan WEBP (Maksimal 10MB).'
       )
     );
   }

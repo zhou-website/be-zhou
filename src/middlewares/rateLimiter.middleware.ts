@@ -52,3 +52,31 @@ export const apiRateLimiter = rateLimit({
     message: 'Batas kuota request tercapai. Silakan coba sesaat lagi.',
   },
 });
+
+// Rate Limiter khusus healthcheck untuk mencegah eksploitasi connection exhaustion pada PostgreSQL
+export const healthRateLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 menit
+  limit: process.env.NODE_ENV === 'production' ? 60 : 300,
+  skip: () => process.env.NODE_ENV === 'test' || process.env.SKIP_RATE_LIMIT === 'true',
+  validate: { xForwardedForHeader: false },
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    status: 'degraded',
+    message: 'Batas frekuensi pemeriksaan status tercapai. Coba sesaat lagi.',
+  },
+});
+
+// Rate Limiter khusus upload berkas publik untuk mencegah storage exhaustion DoS
+export const uploadRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 menit
+  limit: process.env.NODE_ENV === 'production' ? 20 : 200,
+  skip: () => process.env.NODE_ENV === 'test' || process.env.SKIP_RATE_LIMIT === 'true',
+  validate: { xForwardedForHeader: false },
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'Batas kuota unggah berkas tercapai. Silakan tunggu beberapa saat.',
+  },
+});
