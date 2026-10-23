@@ -269,8 +269,9 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
 
 export const resetPassword = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { token, new_password } = req.body || {};
-    if (!token || !new_password) {
+    const { token, new_password, password } = req.body || {};
+    const passwordToSet = new_password || password;
+    if (!token || !passwordToSet) {
       sendError(res, 400, 'Token dan kata sandi baru wajib disertakan');
       return;
     }
@@ -289,7 +290,7 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    const hashedPassword = await bcrypt.hash(new_password, 10);
+    const hashedPassword = await bcrypt.hash(passwordToSet, 10);
 
     await prisma.user.update({
       where: { id: user.id },

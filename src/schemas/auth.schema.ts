@@ -17,10 +17,16 @@ export const forgotPasswordSchema = z.object({
   email: z.string().email('Format email tidak valid'),
 });
 
-export const resetPasswordSchema = z.object({
-  token: z.string().min(1, 'Token reset kata sandi wajib disertakan'),
-  password: z.string().min(6, 'Kata sandi baru minimal 6 karakter'),
-});
+export const resetPasswordSchema = z
+  .object({
+    token: z.string().min(1, 'Token reset kata sandi wajib disertakan'),
+    password: z.string().min(6, 'Kata sandi baru minimal 6 karakter').optional(),
+    new_password: z.string().min(6, 'Kata sandi baru minimal 6 karakter').optional(),
+  })
+  .refine((data) => data.new_password || data.password, {
+    message: 'Kata sandi baru minimal 6 karakter wajib disertakan',
+    path: ['new_password'],
+  });
 
 export const googleLoginSchema = z
   .object({
