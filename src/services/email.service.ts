@@ -184,30 +184,17 @@ export const sendNewConsultationNotificationEmail = async (
   const baseUrl = getFrontendBaseUrl();
   const assignmentUrl = `${baseUrl}/dashboard/superadmin/perikatan?search=${encodeURIComponent(ticketCode)}`;
 
-  // Kumpulkan daftar email penerima: dari konfigurasi .env (Kak Ewi & Superadmin)
-  const envRecipients = (process.env.CONSULTATION_ALERT_EMAILS || 'ewi@zhou-consulting.com,consultingzhou@gmail.com,superadmin@zhouconsulting.com')
+  // Kumpulkan daftar email penerima khusus notifikasi konsultasi (Kak Ewi & Gmail Zhou)
+  // superadmin@zhouconsulting.com dan dekhsafnan@gmail.com secara eksplisit dikecualikan
+  const excludedEmails = ['superadmin@zhouconsulting.com', 'dekhsafnan@gmail.com'];
+  const rawRecipients = (process.env.CONSULTATION_ALERT_EMAILS || 'ewi@zhou-consulting.com,consultingzhou@gmail.com')
     .split(',')
     .map((e) => e.trim().toLowerCase())
-    .filter((e) => e.includes('@'));
+    .filter((e) => e.includes('@') && !excludedEmails.includes(e));
 
-  // Tambahkan juga email seluruh Superadmin aktif dari database
-  try {
-    const superadmins = await prisma.user.findMany({
-      where: { role: 'SUPERADMIN', is_active: true },
-      select: { email: true },
-    });
-    for (const sa of superadmins) {
-      if (sa.email && !envRecipients.includes(sa.email.toLowerCase())) {
-        envRecipients.push(sa.email.toLowerCase());
-      }
-    }
-  } catch {
-    // Abaikan jika database query gagal, tetap gunakan envRecipients
-  }
-
-  if (envRecipients.length === 0) {
-    envRecipients.push('ewi@zhou-consulting.com');
-  }
+  const envRecipients = rawRecipients.length > 0
+    ? Array.from(new Set(rawRecipients))
+    : ['ewi@zhou-consulting.com', 'consultingzhou@gmail.com'];
 
   if (!resend) {
     console.log(`[Resend Mock] Notifikasi Konsultasi Baru [${ticketCode}] diteruskan ke:`, envRecipients);
