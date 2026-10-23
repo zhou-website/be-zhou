@@ -4,7 +4,7 @@ import { prisma } from '../config/database.js';
 import { redis } from '../config/redis.js';
 import { BUCKET_NAME } from '../config/supabase.js';
 import { sendSuccess, sendError } from '../utils/response.js';
-import { sendApplicationConfirmationEmail } from '../services/email.service.js';
+import { sendApplicationConfirmationEmail, sendNewConsultationNotificationEmail } from '../services/email.service.js';
 import { uploadFileToStorage, getSignedDownloadUrl, getPublicStorageUrl, deleteFileFromStorage } from '../services/storage.service.js';
 import { getUploadedFile, getUploadedFiles } from '../middlewares/upload.middleware.js';
 
@@ -1205,6 +1205,22 @@ ${description || title}`;
         console.warn('⚠️ Gagal mengunggah berkas permohonan konsultasi publik:', (uploadErr as Error).message);
       }
     }
+
+    // Kirim notifikasi email tiket konsultasi baru ke Kak Ewi & Superadmin (non-blocking)
+    sendNewConsultationNotificationEmail({
+      ticketCode: newProject.project_code,
+      clientName: String(name).trim(),
+      clientEmail: cleanEmail,
+      clientPhone: phone ? String(phone) : null,
+      companyName: clientCompany,
+      title: title.trim(),
+      category: category || 'Tax Service Core',
+      urgency: selectedPriority,
+      description: description || title,
+      isPublic: true,
+    }).catch((emailErr) => {
+      console.warn('⚠️ Gagal mengirim notifikasi email tiket publik baru:', (emailErr as Error).message);
+    });
 
     sendSuccess(res, 201, 'Permohonan konsultasi berhasil dikirim dan terdaftar di Zhou Consulting', newProject);
   } catch (error) {
