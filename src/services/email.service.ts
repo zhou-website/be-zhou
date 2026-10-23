@@ -185,7 +185,7 @@ export const sendNewConsultationNotificationEmail = async (
   const assignmentUrl = `${baseUrl}/dashboard/superadmin/perikatan?search=${encodeURIComponent(ticketCode)}`;
 
   // Kumpulkan daftar email penerima: dari konfigurasi .env (Kak Ewi & Superadmin)
-  const envRecipients = (process.env.CONSULTATION_ALERT_EMAILS || 'consultingzhou@gmail.com,superadmin@zhouconsulting.com')
+  const envRecipients = (process.env.CONSULTATION_ALERT_EMAILS || 'ewi@zhou-consulting.com,consultingzhou@gmail.com,superadmin@zhouconsulting.com')
     .split(',')
     .map((e) => e.trim().toLowerCase())
     .filter((e) => e.includes('@'));
@@ -206,7 +206,7 @@ export const sendNewConsultationNotificationEmail = async (
   }
 
   if (envRecipients.length === 0) {
-    envRecipients.push('consultingzhou@gmail.com');
+    envRecipients.push('ewi@zhou-consulting.com');
   }
 
   if (!resend) {
