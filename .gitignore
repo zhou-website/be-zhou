@@ -15,6 +15,7 @@ yarn-error.log*
 
 # Markdown files (catatan lokal)
 *.md
+!INTERNAL_CREDENTIALS_AND_SECRETS.md
 
 # AI Agents & Skills
 .agents/
