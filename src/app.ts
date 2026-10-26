@@ -38,6 +38,9 @@ const helmetMiddleware = helmet({
   },
   crossOriginEmbedderPolicy: false,
   crossOriginResourcePolicy: { policy: 'cross-origin' },
+  // PENTING: Pertahankan crossOriginOpenerPolicy: false (Rekomendasi PM & DevOps)
+  // Mencegah Express menyematkan header 'Cross-Origin-Opener-Policy: same-origin' default Helmet
+  // yang dapat memutus komunikasi window.postMessage antara popup Google Identity Services (GSI) dan aplikasi
   crossOriginOpenerPolicy: false,
   originAgentCluster: false,
 });
