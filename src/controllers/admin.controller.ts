@@ -4,6 +4,74 @@ import { prisma } from '../config/database.js';
 import { sendSuccess, sendError } from '../utils/response.js';
 import { uploadFileToStorage, getSignedDownloadUrl, deleteFileFromStorage } from '../services/storage.service.js';
 import { getUploadedFile } from '../middlewares/upload.middleware.js';
+import { sendConsultationCompletedEmail } from '../services/email.service.js';
+
+/**
+ * Helper untuk memeriksa transisi status tiket menjadi COMPLETED dan mengirimkan
+ * email pemberitahuan otomatis ke klien melalui Resend (asinkron & non-blocking).
+ */
+const notifyClientIfProjectCompleted = async (
+  projectId: number,
+  previousStatus?: string | null
+): Promise<void> => {
+  try {
+    // Idempotensi: jika status sebelumnya sudah COMPLETED, jangan kirim email berulang
+    if (previousStatus === 'COMPLETED') {
+      return;
+    }
+
+    const project = await prisma.consultationProject.findUnique({
+      where: { id: projectId },
+      include: {
+        client: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            company_name: true,
+          },
+        },
+        service: {
+          select: {
+            id: true,
+            service_name: true,
+            category: true,
+          },
+        },
+        assigned_admin: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        _count: {
+          select: { documents: true },
+        },
+      },
+    });
+
+    if (!project || project.status !== 'COMPLETED' || !project.client?.email) {
+      return;
+    }
+
+    sendConsultationCompletedEmail({
+      recipientEmail: project.client.email,
+      clientName: project.client.name,
+      companyName: project.client.company_name,
+      ticketCode: project.project_code,
+      title: project.title,
+      serviceCategory: project.service?.category || project.service?.service_name,
+      consultantName: project.assigned_admin?.name,
+      consultantEmail: project.assigned_admin?.email,
+      documentsCount: project._count?.documents || 0,
+    }).catch((err) => {
+      console.warn(`⚠️ [Resend] Gagal kirim email penyelesaian tiket [${project.project_code}]:`, (err as Error).message);
+    });
+  } catch (error) {
+    console.warn(`⚠️ [Resend Helper] Error memproses notifikasi tiket selesai #${projectId}:`, (error as Error).message);
+  }
+};
 
 
 export const getDashboardOverview = async (_req: Request, res: Response): Promise<void> => {
@@ -227,6 +295,13 @@ export const updateConsultationStatus = async (req: Request, res: Response): Pro
       });
     }
 
+    // Notifikasi otomatis ke email klien jika status berubah menjadi COMPLETED (non-blocking)
+    if (statusBefore !== 'COMPLETED' && status === 'COMPLETED') {
+      notifyClientIfProjectCompleted(projectId, statusBefore).catch((err) => {
+        console.warn('⚠️ Gagal mengirim email penyelesaian tiket:', (err as Error).message);
+      });
+    }
+
     sendSuccess(res, 200, 'Status konsultasi berhasil diperbarui dan dicatat ke audit log', updated);
   } catch (error) {
     sendError(res, 500, 'Gagal memperbarui status perikatan', (error as Error).message);
@@ -432,6 +507,13 @@ export const updateConsultation = async (req: Request, res: Response): Promise<v
       }))
     );
 
+    // Notifikasi otomatis ke email klien jika status berubah menjadi COMPLETED (non-blocking)
+    if (currentProject.status !== 'COMPLETED' && updatedProject.status === 'COMPLETED') {
+      notifyClientIfProjectCompleted(projectId, currentProject.status).catch((err) => {
+        console.warn('⚠️ Gagal mengirim email penyelesaian tiket:', (err as Error).message);
+      });
+    }
+
     sendSuccess(res, 200, 'Data konsultasi (progres, PIC, dan catatan) berhasil diperbarui di server', {
       ...updatedProject,
       documents: docsWithUrls,
@@ -486,13 +568,27 @@ export const toggleProjectTask = async (req: Request, res: Response): Promise<vo
       if (allTasks.length > 0) {
         const completedCount = allTasks.filter((t) => t.is_completed).length;
         const progressPercent = Math.round((completedCount / allTasks.length) * 100);
+
+        const projectBefore = await prisma.consultationProject.findUnique({
+          where: { id: task.project_id },
+          select: { status: true },
+        });
+
+        const isNowCompleted = progressPercent === 100;
+
         await prisma.consultationProject.update({
           where: { id: task.project_id },
           data: {
             progress_percent: progressPercent,
-            ...(progressPercent === 100 ? { status: 'COMPLETED' } : {}),
+            ...(isNowCompleted ? { status: 'COMPLETED' } : {}),
           },
         });
+
+        if (isNowCompleted && projectBefore?.status !== 'COMPLETED') {
+          notifyClientIfProjectCompleted(task.project_id, projectBefore?.status).catch((err) => {
+            console.warn('⚠️ Gagal mengirim email penyelesaian tiket:', (err as Error).message);
+          });
+        }
       }
     }
 
@@ -585,6 +681,12 @@ export const updateProjectTasksBatch = async (req: Request, res: Response): Prom
         },
       },
     });
+
+    if (project.status !== 'COMPLETED' && updated.status === 'COMPLETED') {
+      notifyClientIfProjectCompleted(projectId, project.status).catch((err) => {
+        console.warn('⚠️ Gagal mengirim email penyelesaian tiket:', (err as Error).message);
+      });
+    }
 
     sendSuccess(res, 200, 'Seluruh tahapan checklist pengerjaan berhasil diperbarui', updated);
   } catch (error) {
@@ -1121,6 +1223,12 @@ export const updateConsultationMilestones = async (req: Request, res: Response):
         status: nextStatus,
       },
     });
+
+    if (project.status !== 'COMPLETED' && nextStatus === 'COMPLETED') {
+      notifyClientIfProjectCompleted(projectId, project.status).catch((err) => {
+        console.warn('⚠️ Gagal mengirim email penyelesaian tiket:', (err as Error).message);
+      });
+    }
 
     sendSuccess(res, 200, 'Tahapan milestones perikatan berhasil diperbarui', {
       project_id: updated.id,
