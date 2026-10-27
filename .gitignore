@@ -13,9 +13,9 @@ yarn-debug.log*
 yarn-error.log*
 *.log
 
-# Markdown files (catatan lokal)
+# Markdown files (catatan lokal diabaikan, hanya README yang diizinkan)
 *.md
-!INTERNAL_CREDENTIALS_AND_SECRETS.md
+!README.md
 
 # AI Agents & Skills
 .agents/
