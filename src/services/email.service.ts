@@ -311,3 +311,173 @@ export const sendNewConsultationNotificationEmail = async (
     return { success: false, message: (error as Error).message };
   }
 };
+
+export interface ConsultationCompletedEmailParams {
+  recipientEmail: string;
+  clientName: string;
+  companyName?: string | null;
+  ticketCode: string;
+  title: string;
+  serviceCategory?: string | null;
+  consultantName?: string | null;
+  consultantEmail?: string | null;
+  documentsCount?: number;
+}
+
+export const sendConsultationCompletedEmail = async (
+  params: ConsultationCompletedEmailParams
+): Promise<{ success: boolean; message: string; messageId?: string }> => {
+  const {
+    recipientEmail,
+    clientName,
+    companyName,
+    ticketCode,
+    title,
+    serviceCategory,
+    consultantName,
+    consultantEmail,
+    documentsCount = 0,
+  } = params;
+
+  // URL langsung menuju tiket di portal klien
+  const baseUrl = getFrontendBaseUrl();
+  const clientTicketUrl = `${baseUrl}/dashboard/user/tiket?id=${encodeURIComponent(ticketCode)}`;
+
+  // Tembusan internal (BCC) ke Kak Ewi & Zhou Gmail sebagai rekam jejak penyelesaian tiket
+  const excludedEmails = ['superadmin@zhouconsulting.com', 'dekhsafnan@gmail.com', recipientEmail.toLowerCase().trim()];
+  const rawBccRecipients = (process.env.CONSULTATION_ALERT_EMAILS || 'ewi@zhou-consulting.com,consultingzhou@gmail.com')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter((e) => e.includes('@') && !excludedEmails.includes(e));
+
+  const envBccRecipients = rawBccRecipients.length > 0 ? Array.from(new Set(rawBccRecipients)) : [];
+
+  if (!resend) {
+    console.log(`[Resend Mock] Notifikasi Tiket Selesai [${ticketCode}] terkirim ke Klien: ${recipientEmail}`);
+    if (envBccRecipients.length > 0) {
+      console.log(`[Resend Mock] Tembusan BCC Internal: ${envBccRecipients.join(', ')}`);
+    }
+    console.log(`[Resend Mock] Tautan Portal Klien: ${clientTicketUrl}`);
+    return { success: true, message: 'Email penyelesaian tiket disimulasikan (development mock)' };
+  }
+
+  try {
+    const formattedDate = new Intl.DateTimeFormat('id-ID', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'Asia/Jakarta',
+    }).format(new Date());
+
+    const { data, error } = await resend.emails.send({
+      from: FROM_EMAIL,
+      to: recipientEmail,
+      ...(envBccRecipients.length > 0 ? { bcc: envBccRecipients } : {}),
+      replyTo: consultantEmail && consultantEmail.includes('@') ? consultantEmail : REPLY_TO_EMAIL,
+      subject: `[SELESAI] Hasil Konsultasi & Kertas Kerja #${ticketCode} — ${title}`,
+      html: `
+        <div style="font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #1e293b; max-width: 650px; margin: auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
+          <div style="border-bottom: 2px solid #0A2540; padding-bottom: 16px; margin-bottom: 24px;">
+            <h1 style="color: #0A2540; margin: 0; font-size: 22px; font-weight: 700;">Zhou Consulting</h1>
+            <p style="color: #64748b; margin: 4px 0 0 0; font-size: 13px;">Platform Manajemen Konsultasi Pajak, Akuntansi & Hukum Terpadu</p>
+          </div>
+
+          <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-left: 4px solid #16a34a; padding: 16px 20px; border-radius: 6px; margin-bottom: 24px;">
+            <h3 style="margin: 0 0 6px 0; font-size: 16px; color: #166534; font-weight: 700;">
+              ✅ Pekerjaan Konsultasi Telah Selesai Dikerjakan (100%)
+            </h3>
+            <p style="margin: 0; font-size: 14px; color: #15803d; line-height: 1.5;">
+              Kabar baik! Seluruh tahapan pengerjaan kertas kerja, analisis kepatuhan, serta penyusunan deliverable untuk tiket konsultasi Anda telah rampung diselesaikan oleh tim konsultan kami.
+            </p>
+          </div>
+
+          <p style="font-size: 15px; margin: 0 0 16px 0;">
+            Yth. Bapak/Ibu <strong>${clientName}</strong>${companyName ? ` (${companyName})` : ''},
+          </p>
+          <p style="font-size: 14px; color: #475569; margin: 0 0 20px 0;">
+            Berikut adalah rincian penyelesaian perikatan konsultasi Anda:
+          </p>
+
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 14px;">
+            <tr style="border-bottom: 1px solid #f1f5f9;">
+              <td style="padding: 10px 0; color: #64748b; width: 35%;">Nomor Tiket</td>
+              <td style="padding: 10px 0; font-weight: 700; color: #0A2540; font-family: monospace;">${ticketCode}</td>
+            </tr>
+            <tr style="border-bottom: 1px solid #f1f5f9;">
+              <td style="padding: 10px 0; color: #64748b;">Kategori Layanan</td>
+              <td style="padding: 10px 0; font-weight: 600; color: #0f172a;">${serviceCategory || 'Tax Service Core'}</td>
+            </tr>
+            <tr style="border-bottom: 1px solid #f1f5f9;">
+              <td style="padding: 10px 0; color: #64748b;">Kebutuhan / Perikatan</td>
+              <td style="padding: 10px 0; font-weight: 600; color: #0f172a;">${title}</td>
+            </tr>
+            <tr style="border-bottom: 1px solid #f1f5f9;">
+              <td style="padding: 10px 0; color: #64748b;">Konsultan PIC Penanggung Jawab</td>
+              <td style="padding: 10px 0; color: #0f172a; font-weight: 600;">${consultantName || 'Tim Konsultan Senior Zhou'}</td>
+            </tr>
+            <tr style="border-bottom: 1px solid #f1f5f9;">
+              <td style="padding: 10px 0; color: #64748b;">Waktu Penyelesaian</td>
+              <td style="padding: 10px 0; color: #0f172a;">${formattedDate} WIB</td>
+            </tr>
+            <tr style="border-bottom: 1px solid #f1f5f9;">
+              <td style="padding: 10px 0; color: #64748b;">Kertas Kerja & Laporan</td>
+              <td style="padding: 10px 0;">
+                <span style="background-color: #f1f5f9; color: #0A2540; padding: 3px 8px; border-radius: 4px; font-weight: 600; font-size: 13px;">
+                  ${documentsCount > 0 ? `📁 ${documentsCount} Berkas Tersedia di Dokumen Vault` : '📁 Laporan & Rekap Tersedia di Portal'}
+                </span>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 10px 0; color: #64748b;">Status Terkini</td>
+              <td style="padding: 10px 0;">
+                <span style="background-color: #16a34a; color: #ffffff; padding: 4px 10px; border-radius: 4px; font-weight: 700; font-size: 12px; display: inline-block;">
+                  SELESAI (100%)
+                </span>
+              </td>
+            </tr>
+          </table>
+
+          <!-- Tombol Aksi Cepat Buka Tiket Klien -->
+          <div style="text-align: center; margin: 32px 0 20px 0;">
+            <a href="${clientTicketUrl}" style="background-color: #0A2540; color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 15px; display: inline-block; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+              👉 Buka Portal Klien & Unduh Hasil Pekerjaan
+            </a>
+          </div>
+
+          <p style="font-size: 12px; color: #64748b; text-align: center; margin-bottom: 24px;">
+            Jika tombol tidak dapat diklik, salin tautan berikut ke peramban Anda:<br/>
+            <a href="${clientTicketUrl}" style="color: #0284c7; word-break: break-all;">${clientTicketUrl}</a>
+          </p>
+
+          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 18px; margin-bottom: 24px;">
+            <p style="margin: 0; font-size: 13px; color: #475569; line-height: 1.5;">
+              💡 <strong>Langkah Selanjutnya:</strong> Anda dapat langsung memeriksa dokumen hasil akhir, mengunduh lembar kerja, atau meninggalkan tanggapan/pertanyaan lanjutan melalui kolom diskusi pada tiket konsultasi Anda.
+            </p>
+          </div>
+
+          <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+          <p style="font-size: 12px; color: #64748b; text-align: center; margin: 0 0 4px 0;">
+            Terima kasih telah mempercayakan konsultasi perpajakan & keuangan Anda kepada <strong>Zhou Consulting</strong>.
+          </p>
+          <p style="font-size: 11px; color: #94a3b8; text-align: center; margin: 0;">
+            Email ini dikirim secara otomatis oleh sistem Zhou Consulting.
+          </p>
+        </div>
+      `,
+    });
+
+    if (error) {
+      console.warn('⚠️ Resend email delivery warning (consultation completed):', error.message);
+      return { success: false, message: error.message };
+    }
+
+    console.log(`✅ Email penyelesaian tiket [${ticketCode}] terkirim ke klien: ${recipientEmail} (ID: ${data?.id})`);
+    return { success: true, message: 'Email penyelesaian tiket berhasil dikirim', messageId: data?.id };
+  } catch (error) {
+    console.error('❌ Error kirim email penyelesaian tiket:', (error as Error).message);
+    return { success: false, message: (error as Error).message };
+  }
+};
+
